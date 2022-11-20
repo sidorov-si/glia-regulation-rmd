@@ -510,7 +510,21 @@ Strikingly, Nfia is not downregulated, and is not significantly regulated, accor
 3) Regulation of Apcdd1, Aldh1l1, Fos and Nfia in pMN between MUT-D11 and WT-D11:
 
 ```{r, include=T}
+pM.raw = master.table %>%
+  dplyr::select(MUT_D11_pM_NFIAn_R2,
+                MUT_D11_pM_NFIAn_R3,
+                WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3)
+
+pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
+
 pM.dds = pM.results[["deseq_object"]]
+
+pM.res = pM.results[["results_object"]]
 
 pM.dds = estimateSizeFactors(pM.dds)
 
@@ -532,6 +546,43 @@ pM.norm.counts %>%
 Same here! Seems to be a problem with the KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia expression.
 
 ## Check NFIA targets among the differentially expressed genes
+
+1) Check the intersection between the genes differentially expressed in p1 and in p2/pMN:
+
+```{r, include=T}
+p1.degs = p1.res %>%
+  as.data.frame() %>%
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  rownames_to_column(var = "gene_name") %>%
+  pull(gene_name)
+
+p2.degs = p2.res %>%
+  as.data.frame() %>%
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  rownames_to_column(var = "gene_name") %>%
+  pull(gene_name)
+
+pM.degs = pM.res %>%
+  as.data.frame() %>%
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  rownames_to_column(var = "gene_name") %>%
+  pull(gene_name)
+
+cat("Number of DEGs in p1,  MUT-D11 vs WT-D11          :", length(p1.degs), "\n")
+cat("Number of DEGs in p2,  MUT-D11 vs WT-D11          :", length(p2.degs), "\n")
+cat("Number of DEGs in pMN, MUT-D11 vs WT-D11          :", length(pM.degs), "\n")
+cat("Number of DEGs in common between p2 and p1        :", length(intersect(p1.degs, p2.degs)), "\n")
+cat("Number of DEGs in common between pMN and p1       :", length(intersect(p1.degs, pM.degs)), "\n")
+cat("Number of DEGs in common between (pMN + p2) and p1:", length(intersect(p1.degs, union(pM.degs, p2.degs))), "\n")
+cat("Number of DEGs in common between pMN and p2       :", length(intersect(p2.degs, pM.degs)), "\n")
+```
+
+Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is not downregulated and hence we do not expect DEGs to depend on Nfia, and p1 DEGs, where Nfia is significantly downregulated. Consequently, I suppose that the majority of 76 DEGs in p1 are indeed the direct or indirect targets of Nfia.
+
+2) Check known NFIA targets among the genes differentially expressed in p1, p2 and pMN:
 
 ...
 
