@@ -1,0 +1,234 @@
+---
+title: "select_diff_intervals"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+Set FDR:
+
+```{r, include=T}
+fdr = 0.01
+```
+
+## Select consensus intervals differentially accessible in p1
+
+Upload the results of the DESeq2 analysis:
+
+```{r, include=TRUE}
+p1.res = readRDS("../r_results/diff_accessibility/p1_deseq2_results.rds")
+```
+
+Upload the set of consensus regions:
+
+```{r, include=T}
+p1 = read.delim("../input/consensus_peaks.mRp.clN.featureCounts_WT_D7_p1_WT_D11_p1.tsv") %>%
+  dplyr::select(-X)
+
+names(p1) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p1))
+```
+
+Select only consensus regions with significantly upregulated accessibility:
+
+```{r, include=T}
+p1.up.names = rownames(as.data.frame(p1.res) %>% dplyr::filter(padj < fdr) %>% dplyr::filter(log2FoldChange > 0))
+
+p1.up.bed = p1 %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand) %>%
+  dplyr::mutate(Score = 0) %>%
+  dplyr::select(Chr,
+                Start,
+                End,
+                Geneid,
+                Score,
+                Strand) %>%
+  dplyr::filter(Geneid %in% p1.up.names)
+
+write.table(p1.up.bed,
+            file = "../r_results/diff_accessibility/p1_upregulated_intervals_D11_vs_D7.bed",
+            sep = "\t",
+            quote = F,
+            row.names = F,
+            col.names = F)
+```
+
+Select only consensus regions with significantly downregulated accessibility:
+
+```{r, include=T}
+p1.down.names = rownames(as.data.frame(p1.res) %>% dplyr::filter(padj < fdr) %>% dplyr::filter(log2FoldChange < 0))
+
+p1.down.bed = p1 %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand) %>%
+  dplyr::mutate(Score = 0) %>%
+  dplyr::select(Chr,
+                Start,
+                End,
+                Geneid,
+                Score,
+                Strand) %>%
+  dplyr::filter(Geneid %in% p1.down.names)
+
+write.table(p1.down.bed,
+            file = "../r_results/diff_accessibility/p1_downregulated_intervals_D11_vs_D7.bed",
+            sep = "\t",
+            quote = F,
+            row.names = F,
+            col.names = F)
+```
+
+## Select consensus intervals differentially accessible in p2
+
+Upload the results of the DESeq2 analysis:
+
+```{r, include=TRUE}
+p2.res = readRDS("../r_results/diff_accessibility/p2_deseq2_results.rds")
+```
+
+Upload the set of consensus regions:
+
+```{r, include=T}
+p2 = read.delim("../input/consensus_peaks.mRp.clN.featureCounts_WT_D7_p2_WT_D11_p2.tsv") %>%
+  dplyr::select(-X)
+
+names(p2) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p2))
+```
+
+Select only consensus regions with significantly upregulated accessibility:
+
+```{r, include=T}
+p2.up.names = rownames(as.data.frame(p2.res) %>% dplyr::filter(padj < fdr) %>% dplyr::filter(log2FoldChange > 0))
+
+p2.up.bed = p2 %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand) %>%
+  dplyr::mutate(Score = 0) %>%
+  dplyr::select(Chr,
+                Start,
+                End,
+                Geneid,
+                Score,
+                Strand) %>%
+  dplyr::filter(Geneid %in% p2.up.names)
+
+write.table(p2.up.bed,
+            file = "../r_results/diff_accessibility/p2_upregulated_intervals_D11_vs_D7.bed",
+            sep = "\t",
+            quote = F,
+            row.names = F,
+            col.names = F)
+```
+
+Select only consensus regions with significantly downregulated accessibility:
+
+```{r, include=T}
+p2.down.names = rownames(as.data.frame(p2.res) %>% dplyr::filter(padj < fdr) %>% dplyr::filter(log2FoldChange < 0))
+
+p2.down.bed = p2 %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand) %>%
+  dplyr::mutate(Score = 0) %>%
+  dplyr::select(Chr,
+                Start,
+                End,
+                Geneid,
+                Score,
+                Strand) %>%
+  dplyr::filter(Geneid %in% p2.down.names)
+
+write.table(p2.down.bed,
+            file = "../r_results/diff_accessibility/p2_downregulated_intervals_D11_vs_D7.bed",
+            sep = "\t",
+            quote = F,
+            row.names = F,
+            col.names = F)
+```
+
+## Select consensus intervals differentially accessible in pMN
+
+Upload the results of the DESeq2 analysis:
+
+```{r, include=TRUE}
+pMN.res = readRDS("../r_results/diff_accessibility/pMN_deseq2_results.rds")
+```
+
+Upload the set of consensus regions:
+
+```{r, include=T}
+pMN = read.delim("../input/consensus_peaks.mRp.clN.featureCounts_WT_D7_pM_WT_D11_pM.tsv") %>%
+  dplyr::select(-X)
+
+names(pMN) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(pMN))
+```
+
+Select only consensus regions with significantly upregulated accessibility:
+
+```{r, include=T}
+pMN.up.names = rownames(as.data.frame(pMN.res) %>% dplyr::filter(padj < fdr) %>% dplyr::filter(log2FoldChange > 0))
+
+pMN.up.bed = pMN %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand) %>%
+  dplyr::mutate(Score = 0) %>%
+  dplyr::select(Chr,
+                Start,
+                End,
+                Geneid,
+                Score,
+                Strand) %>%
+  dplyr::filter(Geneid %in% pMN.up.names)
+
+write.table(pMN.up.bed,
+            file = "../r_results/diff_accessibility/pMN_upregulated_intervals_D11_vs_D7.bed",
+            sep = "\t",
+            quote = F,
+            row.names = F,
+            col.names = F)
+```
+
+Select only consensus regions with significantly downregulated accessibility:
+
+```{r, include=T}
+pMN.down.names = rownames(as.data.frame(pMN.res) %>% dplyr::filter(padj < fdr) %>% dplyr::filter(log2FoldChange < 0))
+
+pMN.down.bed = pMN %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand) %>%
+  dplyr::mutate(Score = 0) %>%
+  dplyr::select(Chr,
+                Start,
+                End,
+                Geneid,
+                Score,
+                Strand) %>%
+  dplyr::filter(Geneid %in% pMN.down.names)
+
+write.table(pMN.down.bed,
+            file = "../r_results/diff_accessibility/pMN_downregulated_intervals_D11_vs_D7.bed",
+            sep = "\t",
+            quote = F,
+            row.names = F,
+            col.names = F)
+```

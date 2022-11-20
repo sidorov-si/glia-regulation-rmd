@@ -1,0 +1,175 @@
+---
+title: "diff_expression"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+dyn.load("/home/rstudio/libs/libxml2.so.2")
+library(DESeq2)
+library(dplyr)
+library(tibble)
+library(stringr)
+library(apeglm)
+library(ggplot2)
+dyn.load("/home/rstudio/libs/libgsl.so.25")
+dyn.load("/home/rstudio/libs/libgslcblas.so.0")
+# library(TFBSTools)
+# library(Biostrings)
+```
+
+Set FDR:
+
+```{r, include=T}
+fdr = 0.05
+```
+
+Define a general function for the differential expression analysis:
+
+```{r, include=T}
+
+```
+
+Load the master table:
+
+```{r, include=T}
+master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts
+# max_count_cutoff = 10
+# master.table = read.delim(file = "../input/salmon.merged.gene_counts.tsv") %>%
+#   tibble::column_to_rownames(var = "gene_name") %>%
+#   dplyr::select(-gene_id)
+# master.table = assays(readRDS("../input/salmon.merged.gene_counts_scaled.rds"))$counts
+# master.table = assays(readRDS("../input/salmon.merged.gene_counts_length_scaled.rds"))$counts
+```
+
+## Reference set of genes in p1
+
+Find differentially expressed genes in p1 in D11-MUT vs D11-WT:
+
+```{r, include=T}
+p1 = master.table %>%
+  dplyr::select(MUT_D11_p1_NFIAn_R2,
+                MUT_D11_p1_NFIAn_R3,
+                WT_D11_p1_NFIAp_R2,
+                WT_D11_p1_NFIAp_R3)
+
+#sample.names = names(p1)
+
+p1 = round(p1)
+
+# p1 = p1 %>%
+#   tibble::rownames_to_column(var = "gene_name") %>%
+#   rowwise() %>%
+#   mutate(max_count = max(c_across(all_of(sample.names)))) %>%
+#   ungroup() %>%
+#   filter(max_count >= max_count_cutoff) %>%
+#   as.data.frame() %>%
+#   dplyr::select(-max_count) %>%
+#   tibble::column_to_rownames(var = "gene_name")
+
+p1.cond = data.frame(condition = stringr::str_extract(names(p1), "(MUT|WT)"))
+
+row.names(p1.cond) = names(p1)
+
+p1.cond$condition = factor(p1.cond$condition, levels = c("MUT", "WT"))
+
+p1.dds = DESeqDataSetFromMatrix(countData = p1,
+                                colData = p1.cond,
+                                design = ~ condition)
+p1.dds = DESeq(p1.dds)
+
+p1.res = results(p1.dds, 
+                 contrast = c("condition", "MUT", "WT"), 
+                 alpha = fdr) #,
+                 #independentFiltering = F)
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+cat("Number of significantly differentially regulated genes (FDR = 5%):", 
+    sum(p1.res$padj < fdr, na.rm = T), 
+    "\n")
+
+p1.n.up = nrow(as.data.frame(p1.res) %>% 
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0))
+
+cat("Number of upregulated genes (FDR = 5%):", 
+    p1.n.up,
+    "\n")
+
+p1.n.down = nrow(as.data.frame(p1.res) %>% 
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0))
+
+cat("Number of downregulated genes (FDR = 5%):", 
+    p1.n.down,
+    "\n")
+
+p1.n.all = nrow(as.data.frame(p1.res))
+
+cat("The total number of genes:",
+    p1.n.all,
+    "\n")
+
+cat("The percentage of significantly differentially regulated genes:",
+    round((p1.n.up + p1.n.down) / p1.n.all * 100, 2))
+```
+
+Do PCA:
+
+```{r, include=T}
+p1.rld = rlog(p1.dds)
+
+# Based on the code from DESeq2 vignette: https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
+p1.pcaData = plotPCA(p1.rld, returnData = T)
+
+p1.percentVar = round(100 * attr(p1.pcaData, "percentVar"), 2)
+
+p = ggplot(p1.pcaData, aes(PC1, PC2, color = condition)) +
+  geom_point(size = 2) +
+  xlab(paste0("PC1: ", p1.percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", p1.percentVar[2], "% variance")) + 
+  coord_fixed() +
+  theme_classic()
+
+p
+
+# ggsave(filename = "../r_results/diff_accessibility/p1_gliogenesis_diff_accesibility_D11_vs_D7_pca.pdf",
+#        plot = p)
+```
+
+Plot proportions of differentially accessible elements:
+
+```{r, include=T}
+p1.freq.up = p1.n.up / p1.n.all
+
+p1.freq.down = p1.n.down / p1.n.all
+
+p1.freq.nonsign = 1 - p1.freq.up - p1.freq.down
+
+p1.freq.df = data.frame(freq     = c(p1.freq.up, p1.freq.down, p1.freq.nonsign),
+                        category = c("Up",       "Down",       "Non-significant"),
+                        element_type = "Elements") %>%
+  dplyr::mutate(category = factor(category, levels = category))
+
+p = ggplot(p1.freq.df) +
+  geom_col(aes(x = element_type,
+               y = freq,
+               fill = category)) + # position = "dodge"
+  theme_classic()
+
+p
+
+ggsave(filename = "../r_results/diff_accessibility/p1_gliogenesis_diff_accesibility_D11_vs_D7_proportions.pdf",
+       plot = p)
+```
+
+Save the DESeq2 output table as an RDS object:
+
+```{r, include=T}
+saveRDS(p1.res, file = "../r_results/diff_accessibility/p1_deseq2_results.rds")
+```
