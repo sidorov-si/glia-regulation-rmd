@@ -203,15 +203,6 @@ p1.pca = deg_pca(p1.results[["deseq_object"]], "pca_diff-expression_p1-MUT-D11-N
 
 The main difference is not between the conditions, but between on WT sample and the other three samples, which explains the minute number of differentially expressed genes.
 
-Plot proportions of differentially expressed genes, for the sake of completeness:
-
-```{r, include=T}
-p1.deg.proportions.plot = plot_deg_proportions(p1.deg_proportions, 
-                                               "deg-proportions_diff-expression_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.pdf")
-
-# p1.deg.proportions.plot
-```
-
 ## Generate the reference set of genes in p2 (direct and indirect targets)
 
 Find differentially expressed genes in p2 in D11-MUT vs D11-WT:
@@ -248,15 +239,6 @@ p2.pca = deg_pca(p2.results[["deseq_object"]], "pca_diff-expression_p2-MUT-D11-N
 
 The conditions are separated by PC2, but it explains only 22% of the variance, and the samples from the same condition are still quite far apart; hence, the minute number of differentially expressed genes.
 
-Plot the proportions of differentially expressed genes, for the sake of completeness:
-
-```{r, include=T}
-p2.deg.proportions.plot = plot_deg_proportions(p2.deg_proportions, 
-                                               "deg-proportions_diff-expression_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.pdf")
-
-# p2.deg.proportions.plot
-```
-
 ## Generate the reference set of genes in pMN (direct and indirect targets)
 
 Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
@@ -292,15 +274,6 @@ pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-N
 ```
 
 The conditions are separated by PC1, and it explains 71% of the variance; however, the samples from the same condition are still quite far apart from each other. Hence, although there are more differentially expressed genes in pMNs, than in p1 or p2, but still not many.
-
-Plot the proportions of differentially expressed genes, for the sake of completeness:
-
-```{r, include=T}
-pM.deg.proportions.plot = plot_deg_proportions(pM.deg_proportions, 
-                                               "deg-proportions_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.pdf")
-
-# pM.deg.proportions.plot
-```
 
 As there are almost no differentially expressed genes between p{1,2,M}-MUT-D11-NFIAn and p{1,2,M}-WT-D11-NFIAp, while we would expect a considerable number, do some additional checks, taking pMN as an example.
 
@@ -367,7 +340,6 @@ master.table.scaled = assays(readRDS("../input/salmon.merged.gene_counts_length_
 ```
 
 Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
-
 
 ```{r, include=T}
 pM.raw.scaled = master.table.scaled %>%
@@ -580,12 +552,100 @@ cat("Number of DEGs in common between (pMN + p2) and p1:", length(intersect(p1.d
 cat("Number of DEGs in common between pMN and p2       :", length(intersect(p2.degs, pM.degs)), "\n")
 ```
 
-Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is not downregulated and hence we do not expect DEGs to depend on Nfia, and p1 DEGs, where Nfia is significantly downregulated. Consequently, I suppose that the majority of 76 DEGs in p1 are indeed the direct or indirect targets of Nfia.
+Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is not downregulated and hence we do not expect DEGs to depend on Nfia, and p1 DEGs, where Nfia is significantly downregulated. Consequently, I suppose that the majority of 76 DEGs in p1 are indeed the direct or indirect targets of Nfia, and so the set for p1, although much smaller than the other two sets, could be more reliable.
 
 2) Check known NFIA targets among the genes differentially expressed in p1, p2 and pMN:
 
 ...
 
-##
+## Generate an alternative reference set of genes in p1 (direct and indirect targets)
 
-As the number of differentially expressed genes in all the three domains between MUT-D11 and WT-D11 is very small, try a differential expression analysis at D9, when NFIA starts to be expressed. If it shows more differentially expressed genes, I may use it as a reference set, also taking into account that it should be enriched for the direct targets.
+As the number of differentially expressed genes in all the three domains between MUT-D11 and WT-D11 is very small, try a differential expression analysis at D9, when NFIA starts to be expressed. If it shows more differentially expressed genes (and if NFIA is significantly downregulated at D9!), I may use the results as a reference set, also taking into account that these results should be enriched in the direct NFIA targets.
+
+There are no NFIAp samples for D9-WT in p1:
+
+```{r, include=T}
+unlist(stringr::str_match_all(names(master.table), "WT_D9_p1.*"))
+```
+
+so I cannot compare NFIA-expressing p1 cells with the mutant ones.
+
+Additionally, there is only one replicate for MUT-D9 in p2:
+
+```{r, include=T}
+unlist(stringr::str_match_all(names(master.table), "MUT_D9_p2.*"))
+```
+
+which precludes the differential gene expression analysis in MUT-D9 vs WT-D9 in p2.
+
+However, in pMN there are both more than one replicate of WT-D9-NFIAp and of MUT-D9-NFIAn:
+
+```{r, include=T}
+unlist(stringr::str_match_all(names(master.table), "MUT_D9_pM.*"))
+unlist(stringr::str_match_all(names(master.table), "WT_D9_pM_NFIAp.*"))
+```
+
+hence, I will do the differential gene expression analysis at D9 only for pMN.
+
+Find differentially expressed genes in pMN in D9-MUT vs D9-WT:
+
+```{r, include=T}
+pM.raw = master.table %>%
+  dplyr::select(MUT_D9_pM_NFIAn_R1,
+                MUT_D9_pM_NFIAn_R3,
+                WT_D9_pM_NFIAp_R1,
+                WT_D9_pM_NFIAp_R2,
+                WT_D9_pM_NFIAp_R3)
+
+pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D9-NFIAn_vs_pM-WT-D9-NFIAp.rds")
+
+pM.res = pM.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+pM.deg_proportions = print_de_summary(pM.res)
+```
+
+Same low number of differentially expressed genes.
+
+Do PCA:
+
+```{r, include=T}
+pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-MUT-D9-NFIAn_vs_pM-WT-D9-NFIAp.pdf")
+
+# p1.pca
+```
+
+The two conditions are separated by PC2 which explains 32% of the variation.
+
+Check the poster genes and Nfia in MUT-D9 vs WT-D9 in pMN:
+
+```{r, include=T}
+pM.dds = pM.results[["deseq_object"]]
+
+pM.dds = estimateSizeFactors(pM.dds)
+
+pM.norm.counts = counts(pM.dds, normalized = T)
+
+pM.norm.counts %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name %in% control.genes) %>%
+  left_join(as.data.frame(pM.res) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name")) %>%
+  dplyr::select(-baseMean,
+                -lfcSE,
+                -stat,
+                -pvalue)
+```
+
+Nfia is downregulated, but insignificantly, likely because of the huge difference in expression between WT-R1 vs WT-R2 and WT-R3. Fos and Aldh1l1 are downregulated but insignificantly, while Apcdd1 is not downregulated and is not significantly regulated. According to the poster, we would not expect Apcdd1 and Aldh1l1 to be regulated in either direction, while Fos indeed may be downregulated. But the main conclusion is that there could be a problem with WT replicates and/or with the Nfia KO (Nfia is likely downregulated just because of the very high expression in WT-R1). 
+
+
