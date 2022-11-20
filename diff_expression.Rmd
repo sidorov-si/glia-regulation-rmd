@@ -277,6 +277,30 @@ The conditions are separated by PC1, and it explains 71% of the variance; howeve
 
 As there are almost no differentially expressed genes between p{1,2,M}-MUT-D11-NFIAn and p{1,2,M}-WT-D11-NFIAp, while we would expect a considerable number, do some additional checks, taking pMN as an example.
 
+## Check low-expressed genes in all comparisons
+
+Use the `summary()` function from DESeq2 to see low-count genes. If there are a lot of them, then the libraries may be contaminated (for example, with the ribosomal RNA) and so not represent the true RNA diversity; hence, only a low number of differentially expressed genes.
+
+1) Summary of MUT-D11 vs WT-D11 in p1:
+
+```{r, include=T}
+summary(p1.res)
+```
+
+2) Summary of MUT-D11 vs WT-D11 in p2:
+
+```{r, include=T}
+summary(p2.res)
+```
+
+3) Summary of MUT-D11 vs WT-D11 in pMN:
+
+```{r, include=T}
+summary(pM.res)
+```
+
+All the three percentages of low-expressed genes are fine (not really high). So, I cannot say anything about a possible contamination from this.
+
 ## Vary parameters of the differential gene expression analysis
 
 1) Show that rising FDR to 10% does not change the number of differential genes dramatically:
@@ -423,8 +447,6 @@ pM.pca = deg_pca(pM.dds, "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIA
 
 ## Check the regulation of the genes from Isabel's poster
 
-All of the following genes should be downregulated in MUT-D11:
-
 ```{r, include=t}
 control.genes = c("Apcdd1", "Aldh1l1", "Fos", "Nfia")
 ```
@@ -515,7 +537,7 @@ pM.norm.counts %>%
                 -pvalue)
 ```
 
-Same here! Seems to be a problem with the KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia expression.
+Same here! Seems to be a problem with the Nfia KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia expression.
 
 ## Check NFIA targets among the differentially expressed genes
 
@@ -647,5 +669,13 @@ pM.norm.counts %>%
 ```
 
 Nfia is downregulated, but insignificantly, likely because of the huge difference in expression between WT-R1 vs WT-R2 and WT-R3. Fos and Aldh1l1 are downregulated but insignificantly, while Apcdd1 is not downregulated and is not significantly regulated. According to the poster, we would not expect Apcdd1 and Aldh1l1 to be regulated in either direction, while Fos indeed may be downregulated. But the main conclusion is that there could be a problem with WT replicates and/or with the Nfia KO (Nfia is likely downregulated just because of the very high expression in WT-R1). 
+
+Check the low-expressed genes:
+
+```{r, include=T}
+summary(pM.res)
+```
+
+17% does not seem to be too high.
 
 
