@@ -14,9 +14,9 @@ library(apeglm)
 library(ggplot2)
 dyn.load("/home/rstudio/libs/libgsl.so.25")
 dyn.load("/home/rstudio/libs/libgslcblas.so.0")
-# library(TFBSTools)
-# library(Biostrings)
 ```
+
+## Init
 
 Set FDR:
 
@@ -27,149 +27,426 @@ fdr = 0.05
 Define a general function for the differential expression analysis:
 
 ```{r, include=T}
+diff_expression = function(p, p.cond, diff.levels, de.results.rds.filename) {
+  p = round(p)
+  
+  row.names(p.cond) = names(p)
+  
+  p.cond$condition = factor(p.cond$condition, levels = diff.levels)
+  
+  p.dds = DESeqDataSetFromMatrix(countData = p,
+                                 colData = p.cond,
+                                 design = ~ condition)
+  
+  p.dds = DESeq(p.dds)
+  
+  p.res = results(p.dds, 
+                  contrast = c("condition", diff.levels[1], diff.levels[2]), 
+                  alpha = fdr)
+  
+  saveRDS(p.res, file = paste0("../r_results/diff_expression/tables/", de.results.rds.filename))
+  
+  de.results = list(p.res, p.dds)
+  
+  names(de.results) = c("results_object", "deseq_object")
+  
+  return(de.results)
+}
+```
 
+Define a general function to gather differential expression stats:
+
+```{r, include=T}
+print_de_summary = function(p.res) {
+  cat("Number of significantly differentially regulated genes (FDR =", fdr * 100, "%):", 
+    sum(p.res$padj < fdr, na.rm = T), 
+    "\n")
+
+  p.n.up = nrow(as.data.frame(p.res) %>% 
+    filter(!is.na(padj)) %>%
+    filter(padj < fdr) %>%
+    filter(log2FoldChange > 0))
+  
+  cat("Number of upregulated genes (FDR =", fdr * 100, "%):", 
+      p.n.up,
+      "\n")
+  
+  p.n.down = nrow(as.data.frame(p.res) %>% 
+    filter(!is.na(padj)) %>%
+    filter(padj < fdr) %>%
+    filter(log2FoldChange < 0))
+  
+  cat("Number of downregulated genes (FDR =", fdr * 100, "%):", 
+      p.n.down,
+      "\n")
+  
+  p.n.all = nrow(as.data.frame(p.res))
+  
+  cat("The total number of genes:",
+      p.n.all,
+      "\n")
+  
+  cat("The percentage of significantly differentially regulated genes:",
+      round((p.n.up + p.n.down) / p.n.all * 100, 2))
+  
+  deg.proportions = list(p.n.up, p.n.down, p.n.all)
+  
+  names(deg.proportions) = c("up", "down", "all")
+  
+  return(deg.proportions)
+}
+```
+
+Define a general function to do PCA:
+
+```{r, include=T}
+deg_pca = function(p.dds, pca.plot.filename) {
+  p.rld = rlog(p.dds)
+  
+  # Based on the code from DESeq2 vignette: https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
+  p.pcaData = plotPCA(p.rld, returnData = T)
+  
+  p.percentVar = round(100 * attr(p.pcaData, "percentVar"), 2)
+  
+  pca.plot = ggplot(p.pcaData, aes(PC1, PC2, color = condition)) +
+    geom_point(size = 2) +
+    xlab(paste0("PC1: ", p.percentVar[1], "% variance")) +
+    ylab(paste0("PC2: ", p.percentVar[2], "% variance")) + 
+    coord_fixed() +
+    theme_classic()
+  
+  ggsave(filename = paste0("../r_results/diff_expression/plots/", pca.plot.filename),
+         plot = pca.plot)
+  
+  return(pca.plot)
+}
+```
+
+Define a general function for plotting the proportions of differentially expressed genes:
+
+```{r, include=T}
+plot_deg_proportions = function(p.deseq.object, deg.proportions.plot.filename) {
+  p.n.up = p.deseq.object[["up"]]
+
+  p.n.down = p.deseq.object[["down"]]
+  
+  p.n.all = p.deseq.object[["all"]]
+
+  p.freq.up = p.n.up / p.n.all
+  
+  p.freq.down = p.n.down / p.n.all
+  
+  p.freq.nonsign = 1 - p.freq.up - p.freq.down
+  
+  p.freq.df = data.frame(freq     = c(p.freq.up, p.freq.down, p.freq.nonsign),
+                         category = c("Up",      "Down",      "Non-significant"),
+                         element_type = "Genes") %>%
+    dplyr::mutate(category = factor(category, levels = category))
+  
+  prop.plot = ggplot(p.freq.df) +
+    geom_col(aes(x = element_type,
+                 y = freq,
+                 fill = category)) + 
+    theme_classic()
+  
+  ggsave(filename = paste0("../r_results/diff_expression/plots/", deg.proportions.plot.filename),
+         plot = prop.plot)
+  
+  return(prop.plot)
+}
 ```
 
 Load the master table:
 
 ```{r, include=T}
 master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts
-# max_count_cutoff = 10
-# master.table = read.delim(file = "../input/salmon.merged.gene_counts.tsv") %>%
-#   tibble::column_to_rownames(var = "gene_name") %>%
-#   dplyr::select(-gene_id)
-# master.table = assays(readRDS("../input/salmon.merged.gene_counts_scaled.rds"))$counts
-# master.table = assays(readRDS("../input/salmon.merged.gene_counts_length_scaled.rds"))$counts
 ```
 
-## Reference set of genes in p1
+## Generate the reference set of genes in p1 (direct and indirect targets)
 
 Find differentially expressed genes in p1 in D11-MUT vs D11-WT:
 
 ```{r, include=T}
-p1 = master.table %>%
+p1.raw = master.table %>%
   dplyr::select(MUT_D11_p1_NFIAn_R2,
                 MUT_D11_p1_NFIAn_R3,
                 WT_D11_p1_NFIAp_R2,
                 WT_D11_p1_NFIAp_R3)
 
-#sample.names = names(p1)
+# A command like 
+# unlist(stringr::str_match_all(names(master.table), "MUT_D11_p1.*")) 
+# is convenient for extracting sample names for a given condition 
+# from the header of the master table.
 
-p1 = round(p1)
+p1.cond.raw = data.frame(condition = stringr::str_extract(names(p1.raw), "(MUT|WT)"))
 
-# p1 = p1 %>%
-#   tibble::rownames_to_column(var = "gene_name") %>%
-#   rowwise() %>%
-#   mutate(max_count = max(c_across(all_of(sample.names)))) %>%
-#   ungroup() %>%
-#   filter(max_count >= max_count_cutoff) %>%
-#   as.data.frame() %>%
-#   dplyr::select(-max_count) %>%
-#   tibble::column_to_rownames(var = "gene_name")
+diff.levels = c("MUT", "WT")
 
-p1.cond = data.frame(condition = stringr::str_extract(names(p1), "(MUT|WT)"))
+p1.results = diff_expression(p1.raw, p1.cond.raw, diff.levels, "deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
 
-row.names(p1.cond) = names(p1)
-
-p1.cond$condition = factor(p1.cond$condition, levels = c("MUT", "WT"))
-
-p1.dds = DESeqDataSetFromMatrix(countData = p1,
-                                colData = p1.cond,
-                                design = ~ condition)
-p1.dds = DESeq(p1.dds)
-
-p1.res = results(p1.dds, 
-                 contrast = c("condition", "MUT", "WT"), 
-                 alpha = fdr) #,
-                 #independentFiltering = F)
+p1.res = p1.results[["results_object"]]
 ```
 
 Print a summary of the results:
 
 ```{r, include=T}
-cat("Number of significantly differentially regulated genes (FDR = 5%):", 
-    sum(p1.res$padj < fdr, na.rm = T), 
-    "\n")
-
-p1.n.up = nrow(as.data.frame(p1.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange > 0))
-
-cat("Number of upregulated genes (FDR = 5%):", 
-    p1.n.up,
-    "\n")
-
-p1.n.down = nrow(as.data.frame(p1.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0))
-
-cat("Number of downregulated genes (FDR = 5%):", 
-    p1.n.down,
-    "\n")
-
-p1.n.all = nrow(as.data.frame(p1.res))
-
-cat("The total number of genes:",
-    p1.n.all,
-    "\n")
-
-cat("The percentage of significantly differentially regulated genes:",
-    round((p1.n.up + p1.n.down) / p1.n.all * 100, 2))
+p1.deg_proportions = print_de_summary(p1.res)
 ```
 
 Do PCA:
 
 ```{r, include=T}
-p1.rld = rlog(p1.dds)
+p1.pca = deg_pca(p1.results[["deseq_object"]], "pca_diff-expression_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.pdf")
 
-# Based on the code from DESeq2 vignette: https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
-p1.pcaData = plotPCA(p1.rld, returnData = T)
-
-p1.percentVar = round(100 * attr(p1.pcaData, "percentVar"), 2)
-
-p = ggplot(p1.pcaData, aes(PC1, PC2, color = condition)) +
-  geom_point(size = 2) +
-  xlab(paste0("PC1: ", p1.percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", p1.percentVar[2], "% variance")) + 
-  coord_fixed() +
-  theme_classic()
-
-p
-
-# ggsave(filename = "../r_results/diff_accessibility/p1_gliogenesis_diff_accesibility_D11_vs_D7_pca.pdf",
-#        plot = p)
+# p1.pca
 ```
 
-Plot proportions of differentially accessible elements:
+The main difference is not between the conditions, but between on WT sample and the other three samples, which explains the minute number of differentially expressed genes.
+
+Plot proportions of differentially expressed genes, for the sake of completeness:
 
 ```{r, include=T}
-p1.freq.up = p1.n.up / p1.n.all
+p1.deg.proportions.plot = plot_deg_proportions(p1.deg_proportions, 
+                                               "deg-proportions_diff-expression_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.pdf")
 
-p1.freq.down = p1.n.down / p1.n.all
-
-p1.freq.nonsign = 1 - p1.freq.up - p1.freq.down
-
-p1.freq.df = data.frame(freq     = c(p1.freq.up, p1.freq.down, p1.freq.nonsign),
-                        category = c("Up",       "Down",       "Non-significant"),
-                        element_type = "Elements") %>%
-  dplyr::mutate(category = factor(category, levels = category))
-
-p = ggplot(p1.freq.df) +
-  geom_col(aes(x = element_type,
-               y = freq,
-               fill = category)) + # position = "dodge"
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/p1_gliogenesis_diff_accesibility_D11_vs_D7_proportions.pdf",
-       plot = p)
+# p1.deg.proportions.plot
 ```
 
-Save the DESeq2 output table as an RDS object:
+## Generate the reference set of genes in p2 (direct and indirect targets)
+
+Find differentially expressed genes in p2 in D11-MUT vs D11-WT:
 
 ```{r, include=T}
-saveRDS(p1.res, file = "../r_results/diff_accessibility/p1_deseq2_results.rds")
+p2.raw = master.table %>%
+  dplyr::select(MUT_D11_p2_NFIAn_R2,
+                MUT_D11_p2_NFIAn_R3,
+                WT_D11_p2_NFIAp_R2,
+                WT_D11_p2_NFIAp_R3)
+
+p2.cond.raw = data.frame(condition = stringr::str_extract(names(p2.raw), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+p2.results = diff_expression(p2.raw, p2.cond.raw, diff.levels, "deseq-results_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.rds")
+
+p2.res = p2.results[["results_object"]]
 ```
+
+Print a summary of the results:
+
+```{r, include=T}
+p2.deg_proportions = print_de_summary(p2.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+p2.pca = deg_pca(p2.results[["deseq_object"]], "pca_diff-expression_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.pdf")
+
+# p2.pca
+```
+
+The conditions are separated by PC2, but it explains only 22% of the variance, and the samples from the same condition are still quite far apart; hence, the minute number of differentially expressed genes.
+
+Plot the proportions of differentially expressed genes, for the sake of completeness:
+
+```{r, include=T}
+p2.deg.proportions.plot = plot_deg_proportions(p2.deg_proportions, 
+                                               "deg-proportions_diff-expression_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.pdf")
+
+# p2.deg.proportions.plot
+```
+
+## Generate the reference set of genes in pMN (direct and indirect targets)
+
+Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
+
+```{r, include=T}
+pM.raw = master.table %>%
+  dplyr::select(MUT_D11_pM_NFIAn_R2,
+                MUT_D11_pM_NFIAn_R3,
+                WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3)
+
+pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
+
+pM.res = pM.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+pM.deg_proportions = print_de_summary(pM.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.pdf")
+
+# pM.pca
+```
+
+The conditions are separated by PC1, and it explains 71% of the variance; however, the samples from the same condition are still quite far apart from each other. Hence, although there are more differentially expressed genes in pMNs, than in p1 or p2, but still not many.
+
+Plot the proportions of differentially expressed genes, for the sake of completeness:
+
+```{r, include=T}
+pM.deg.proportions.plot = plot_deg_proportions(pM.deg_proportions, 
+                                               "deg-proportions_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.pdf")
+
+# pM.deg.proportions.plot
+```
+
+As there are almost no differentially expressed genes between p{1,2,M}-MUT-D11-NFIAn and p{1,2,M}-WT-D11-NFIAp, while we would expect a considerable number, do some additional checks, taking pMN as an example.
+
+## Vary parameters of the differential gene expression analysis
+
+1) Show that rising FDR to 10% does not change the number of differential genes dramatically:
+
+```{r, include=T}
+fdr = 0.1
+
+pM.results.10 = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_fdr10pc.rds")
+
+pM.res.10 = pM.results[["results_object"]]
+
+pM.deg_proportions.10 = print_de_summary(pM.res.10)
+
+fdr = 0.05
+```
+
+249 differentially expressed genes, instead of 183 before; hence, not a big difference.
+
+2) Show that the use of the scaled counts does not make any difference:
+
+a) Use `salmon.merged.gene_counts_scaled.rds`:
+
+Load the master table:
+
+```{r, include=T}
+master.table.scaled = assays(readRDS("../input/salmon.merged.gene_counts_scaled.rds"))$counts
+```
+
+Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
+
+```{r, include=T}
+pM.raw.scaled = master.table.scaled %>%
+  dplyr::select(MUT_D11_pM_NFIAn_R2,
+                MUT_D11_pM_NFIAn_R3,
+                WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3)
+
+pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw.scaled), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+pM.results.scaled = diff_expression(pM.raw.scaled, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_scaled.rds")
+
+pM.res.scaled = pM.results.scaled[["results_object"]]
+
+pM.deg_proportions.scaled = print_de_summary(pM.res.scaled)
+
+pM.pca.scaled = deg_pca(pM.results.scaled[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_scaled.pdf")
+
+pM.pca.scaled
+```
+
+165 differentially expressed genes, instead of 183; even a smaller set.
+
+b) Use `salmon.merged.gene_counts_length_scaled.rds`:
+
+Load the master table:
+
+```{r, include=T}
+master.table.scaled = assays(readRDS("../input/salmon.merged.gene_counts_length_scaled.rds"))$counts
+```
+
+Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
+
+
+```{r, include=T}
+pM.raw.scaled = master.table.scaled %>%
+  dplyr::select(MUT_D11_pM_NFIAn_R2,
+                MUT_D11_pM_NFIAn_R3,
+                WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3)
+
+pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw.scaled), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+pM.results.scaled = diff_expression(pM.raw.scaled, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_scaled.rds")
+
+pM.res.scaled = pM.results.scaled[["results_object"]]
+
+pM.deg_proportions.scaled = print_de_summary(pM.res.scaled)
+
+pM.pca.scaled = deg_pca(pM.results.scaled[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_scaled.pdf")
+
+pM.pca.scaled
+```
+
+183 differentially expressed genes again.
+
+3) Show that pre-filtering of genes by max(expression) >= 10 TPM (with the independent filtering in DESeq2 turned off) does not make any difference:
+
+```{r, include=T}
+max_count_cutoff = 10
+
+pM.raw = master.table %>%
+  dplyr::select(MUT_D11_pM_NFIAn_R2,
+                MUT_D11_pM_NFIAn_R3,
+                WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3)
+
+pM.sample.names = names(pM.raw)
+
+pM.raw = pM.raw %>%
+  tibble::rownames_to_column(var = "gene_name") %>%
+  rowwise() %>%
+  mutate(max_count = max(c_across(all_of(pM.sample.names)))) %>%
+  ungroup() %>%
+  filter(max_count >= max_count_cutoff) %>%
+  as.data.frame() %>%
+  dplyr::select(-max_count) %>%
+  tibble::column_to_rownames(var = "gene_name")
+
+pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
+
+diff.levels = c("MUT", "WT")
+
+pM = round(pM.raw)
+  
+row.names(pM.cond) = names(pM)
+
+pM.cond$condition = factor(pM.cond$condition, levels = diff.levels)
+
+pM.dds = DESeqDataSetFromMatrix(countData = pM,
+                                colData = pM.cond,
+                                design = ~ condition)
+
+pM.dds = DESeq(pM.dds)
+
+pM.res = results(pM.dds, 
+                 contrast = c("condition", diff.levels[1], diff.levels[2]), 
+                 alpha = fdr,
+                 independentFiltering = F)
+
+saveRDS(pM.res, file = paste0("../r_results/diff_expression/tables/",
+                              "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_expr-gte10tpm.rds"))
+
+pM.deg_proportions = print_de_summary(pM.res)
+
+pM.pca = deg_pca(pM.dds, "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_expr-gte10tpm.pdf")
+
+# pM.pca
+```
+
+172 differentially expressed genes, instead of 183; hence, not a big difference. The smaller number of differentially expressed genes obtained after the pre-filtering by max TPM means that the independent filtering by DESeq2 is more efficient (in terms of the number of rejected null hypotheses) than max TPM pre-filtering.
+
+
