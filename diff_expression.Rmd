@@ -350,7 +350,7 @@ pM.deg_proportions.scaled = print_de_summary(pM.res.scaled)
 
 pM.pca.scaled = deg_pca(pM.results.scaled[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_scaled.pdf")
 
-pM.pca.scaled
+# pM.pca.scaled
 ```
 
 165 differentially expressed genes, instead of 183; even a smaller set.
@@ -384,12 +384,12 @@ pM.deg_proportions.scaled = print_de_summary(pM.res.scaled)
 
 pM.pca.scaled = deg_pca(pM.results.scaled[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_scaled.pdf")
 
-pM.pca.scaled
+# pM.pca.scaled
 ```
 
 183 differentially expressed genes again.
 
-3) Show that pre-filtering of genes by max(expression) >= 10 TPM (with the independent filtering in DESeq2 turned off) does not make any difference:
+3) Show that pre-filtering of genes by max(expression) >= 10 (with the independent filtering in DESeq2 turned off) does not make any difference:
 
 ```{r, include=T}
 max_count_cutoff = 10
@@ -434,11 +434,11 @@ pM.res = results(pM.dds,
                  independentFiltering = F)
 
 saveRDS(pM.res, file = paste0("../r_results/diff_expression/tables/",
-                              "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_expr-gte10tpm.rds"))
+                              "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_expr-gte10.rds"))
 
 pM.deg_proportions = print_de_summary(pM.res)
 
-pM.pca = deg_pca(pM.dds, "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_expr-gte10tpm.pdf")
+pM.pca = deg_pca(pM.dds, "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_expr-gte10.pdf")
 
 # pM.pca
 ```
@@ -576,7 +576,11 @@ cat("Number of DEGs in common between pMN and p2       :", length(intersect(p2.d
 
 Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is not downregulated and hence we do not expect DEGs to depend on Nfia, and p1 DEGs, where Nfia is significantly downregulated. Consequently, I suppose that the majority of 76 DEGs in p1 are indeed the direct or indirect targets of Nfia, and so the set for p1, although much smaller than the other two sets, could be more reliable.
 
-2) Check known NFIA targets among the genes differentially expressed in p1, p2 and pMN:
+2) Check known NFIA targets among the genes differentially expressed in p1, p2 and pMN between MUT and WT:
+
+...
+
+## Find NFIA-independent genes differentially expressed between MUT and WT in D5 and D7
 
 ...
 
@@ -678,4 +682,212 @@ summary(pM.res)
 
 17% does not seem to be too high.
 
+## Find genes differentially expressed between D7 (NFIA-) and D11 (NFIA+) in WT
+
+1) Find differentially expressed genes in p1 in D11-WT vs D7-WT:
+
+```{r, include=T}
+p1.raw = master.table %>%
+  dplyr::select(WT_D11_p1_NFIAp_R2,
+                WT_D11_p1_NFIAp_R3,
+                WT_D7_p1_NFIAn_R1,
+                WT_D7_p1_NFIAn_R2,
+                WT_D7_p1_NFIAn_R3)
+
+p1.cond.raw = data.frame(condition = stringr::str_extract(names(p1.raw), "(D11|D7)"))
+
+diff.levels = c("D11", "D7")
+
+p1.results = diff_expression(p1.raw, p1.cond.raw, diff.levels, "deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds")
+
+p1.res = p1.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+p1.deg_proportions = print_de_summary(p1.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+p1.pca = deg_pca(p1.results[["deseq_object"]], "pca_diff-expression_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.pdf")
+
+# p1.pca
+```
+
+The two conditions are very well separated by PC1.
+
+Check the expression of Nfia across the two conditions:
+
+```{r, include=T}
+p1.dds = p1.results[["deseq_object"]]
+
+p1.dds = estimateSizeFactors(p1.dds)
+
+p1.norm.counts = counts(p1.dds, normalized = T)
+
+p1.norm.counts %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name %in% control.genes) %>%
+  left_join(as.data.frame(p1.res) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name")) %>%
+  dplyr::select(-baseMean,
+                -lfcSE,
+                -stat,
+                -pvalue)
+```
+
+Exactly as expected, Nfia is significantly upregulated, and so are Fos and Aldh1l1 but not Apcdd1.
+
+Check the number of low-expressed genes:
+
+```{r, include=T}
+summary(p1.res)
+```
+
+Same as in other comparisons.
+
+2) Find differentially expressed genes in p2 in D11-WT vs D7-WT:
+
+```{r, include=T}
+p2.raw = master.table %>%
+  dplyr::select(WT_D11_p2_NFIAp_R2,
+                WT_D11_p2_NFIAp_R3,
+                WT_D7_p2_NFIAn_R1,
+                WT_D7_p2_NFIAn_R2,
+                WT_D7_p2_NFIAn_R3)
+
+p2.cond.raw = data.frame(condition = stringr::str_extract(names(p2.raw), "(D11|D7)"))
+
+diff.levels = c("D11", "D7")
+
+p2.results = diff_expression(p2.raw, p2.cond.raw, diff.levels, "deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds")
+
+p2.res = p2.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+p2.deg_proportions = print_de_summary(p2.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+p2.pca = deg_pca(p2.results[["deseq_object"]], "pca_diff-expression_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.pdf")
+
+# p1.pca
+```
+
+The two conditions are very well separated by PC1.
+
+Check the expression of Nfia across the two conditions:
+
+```{r, include=T}
+p2.dds = p2.results[["deseq_object"]]
+
+p2.dds = estimateSizeFactors(p2.dds)
+
+p2.norm.counts = counts(p2.dds, normalized = T)
+
+p2.norm.counts %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name %in% control.genes) %>%
+  left_join(as.data.frame(p2.res) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name")) %>%
+  dplyr::select(-baseMean,
+                -lfcSE,
+                -stat,
+                -pvalue)
+```
+
+Exactly as expected, Nfia is significantly upregulated, and so are Apcdd1, Aldh1l1 and Fos. 
+
+Check the number of low-expressed genes:
+
+```{r, include=T}
+summary(p2.res)
+```
+
+Same as in other comparisons.
+
+3) Find differentially expressed genes in pMN in D11-WT vs D7-WT:
+
+```{r, include=T}
+pM.raw = master.table %>%
+  dplyr::select(WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3,
+                WT_D7_pM_NFIAn_R1,
+                WT_D7_pM_NFIAn_R2,
+                WT_D7_pM_NFIAn_R3)
+
+pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(D11|D7)"))
+
+diff.levels = c("D11", "D7")
+
+pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds")
+
+pM.res = pM.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+pM.deg_proportions = print_de_summary(pM.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.pdf")
+
+# p1.pca
+```
+
+The two conditions are very well separated by PC1.
+
+Check the expression of Nfia across the two conditions:
+
+```{r, include=T}
+pM.dds = pM.results[["deseq_object"]]
+
+pM.dds = estimateSizeFactors(pM.dds)
+
+pM.norm.counts = counts(pM.dds, normalized = T)
+
+pM.norm.counts %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name %in% control.genes) %>%
+  left_join(as.data.frame(pM.res) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name")) %>%
+  dplyr::select(-baseMean,
+                -lfcSE,
+                -stat,
+                -pvalue)
+```
+
+Exactly as expected, Nfia is significantly upregulated, and so are Apcdd1, Aldh1l1 and Fos. 
+
+Check the number of low-expressed genes:
+
+```{r, include=T}
+summary(pM.res)
+```
+
+Same as in other comparisons.
+
+Overall, there are a lot of differentially expressed genes between D7 and D11 in p1, p2 and pMN, as expected. And also, as expected, Nfia is differentially upregulated in D11 vs D7.
+
+## Check NFIA targets (direct and indirect) among the genes differentially expressed in WT between D11 and D7
+
+...
 
