@@ -539,7 +539,7 @@ pM.norm.counts %>%
 
 Same here! Seems to be a problem with the Nfia KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia expression.
 
-## Check NFIA targets among the differentially expressed genes
+## Check NFIA targets among the differentially expressed genes in MUT-D11 vs WT-D11
 
 1) Check the intersection between the genes differentially expressed in p1 and in p2/pMN:
 
@@ -576,11 +576,7 @@ cat("Number of DEGs in common between pMN and p2       :", length(intersect(p2.d
 
 Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is not downregulated and hence we do not expect DEGs to depend on Nfia, and p1 DEGs, where Nfia is significantly downregulated. Consequently, I suppose that the majority of 76 DEGs in p1 are indeed the direct or indirect targets of Nfia, and so the set for p1, although much smaller than the other two sets, could be more reliable.
 
-2) Check known NFIA targets among the genes differentially expressed in p1, p2 and pMN between MUT and WT:
-
-...
-
-## Find NFIA-independent genes differentially expressed between MUT and WT in D5 and D7
+2) Check known NFIA targets in the developing spinal cord among the genes differentially expressed in p1, p2 and pMN between MUT and WT:
 
 ...
 
@@ -681,6 +677,15 @@ summary(pM.res)
 ```
 
 17% does not seem to be too high.
+
+## Find NFIA-independent genes
+
+- (differentially expressed between MUT and WT in p1 or p2 or pMN at D5 or D7)
+- check NFIA targets
+
+## Form the final set of NFIA-regulated genes
+
+...
 
 ## Find genes differentially expressed between D7 (NFIA-) and D11 (NFIA+) in WT
 
@@ -890,4 +895,9 @@ Overall, there are a lot of differentially expressed genes between D7 and D11 in
 ## Check NFIA targets (direct and indirect) among the genes differentially expressed in WT between D11 and D7
 
 ...
+
+## Form domain-specific final sets of NFIA-regulated genes
+
+...
+- GO-enrichment
 
