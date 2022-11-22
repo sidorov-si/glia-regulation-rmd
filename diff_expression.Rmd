@@ -14,6 +14,7 @@ library(apeglm)
 library(ggplot2)
 dyn.load("/home/rstudio/libs/libgsl.so.25")
 dyn.load("/home/rstudio/libs/libgslcblas.so.0")
+library(hypeR)
 ```
 
 ## Init
@@ -448,7 +449,7 @@ pM.pca = deg_pca(pM.dds, "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIA
 ## Check the regulation of the genes from Isabel's poster
 
 ```{r, include=t}
-control.genes = c("Apcdd1", "Aldh1l1", "Fos", "Nfia")
+control.genes = c("Apcdd1", "Aldh1l1", "Fos", "Nfia", "Nfib")
 ```
 
 Here I show gene expression counts normalized by DESeq2 (https://hbctraining.github.io/DGE_workshop_salmon/lessons/02_DGE_count_normalization.html), that is, the counts that are used by DESeq2 to perform the differential gene expression analysis.
@@ -475,9 +476,9 @@ p1.norm.counts %>%
                 -pvalue)
 ```
 
-Aldh1l1, Fos and Nfia are down-regulated, as expected. Apcdd1 is insignificantly upregulated, which does not contradict the graph on the poster. Surprisingly, Nfia is not significantly downregulated, which may be explained by more than a two-fold difference in the DESeq2-normalized counts of this gene between the two replicates of WT-D11.
+Aldh1l1, Fos, Nfia and Nfib are down-regulated, as expected. Apcdd1 is insignificantly upregulated, which does not contradict the graph on the poster. Surprisingly, Nfia and Nfib are not significantly downregulated.
 
-2) Regulation of Apcdd1, Aldh1l1, Fos and Nfia in p2 between MUT-D11 and WT-D11:
+2) Regulation of Apcdd1, Aldh1l1, Fos, Nfia and Nfib in p2 between MUT-D11 and WT-D11:
 
 ```{r, include=T}
 p2.dds = p2.results[["deseq_object"]]
@@ -499,9 +500,9 @@ p2.norm.counts %>%
                 -pvalue)
 ```
 
-Strikingly, Nfia is not downregulated, and is not significantly regulated, according to DESeq2. This may highlight a problem with the KO. The other three genes are downregulated, as expected, and even significantly so. But the fact that Nfia is not significantly downregulated (and is not downregulated at all) means that the genes that are differentially expressed between MUT-D11 and WT-D11 in p2 are likely perturbed not because of the (insignificant) change in the Nfia expression, but because of some other reasons. Consequently, I need to check, if this set of differentially expressed genes intersects with the other two sets (in p1 and pMN), as the intersection may be a group of genes whose expression does not actually depend on the Nfia expression.
+Strikingly, Nfia is not downregulated, and is not significantly regulated, according to DESeq2. This may highlight a problem with the KO. Nfib is downregulated, but not significantly, and the log2 fold change is not substantial. The other three genes are downregulated, as expected, and even significantly so. But the fact that Nfia and Nfib are not significantly downregulated means that the genes that are differentially expressed between MUT-D11 and WT-D11 in p2 are likely perturbed not because of the (insignificant) change in the Nfia or Nfib expression, but because of some other reasons. Consequently, I need to check, if this set of differentially expressed genes intersects with the other two sets (in p1 and pMN), as the intersection may be a group of genes whose expression does not actually depend on the Nfia expression.
 
-3) Regulation of Apcdd1, Aldh1l1, Fos and Nfia in pMN between MUT-D11 and WT-D11:
+3) Regulation of Apcdd1, Aldh1l1, Fos, Nfia and Nfib in pMN between MUT-D11 and WT-D11:
 
 ```{r, include=T}
 pM.raw = master.table %>%
@@ -537,7 +538,7 @@ pM.norm.counts %>%
                 -pvalue)
 ```
 
-Same here! Seems to be a problem with the Nfia KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia expression.
+Same here! Seems to be a problem with the Nfia and Nfib KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia or Nfib expression. On the other hand, Nfib demonstrates a two-fold downregulation, so it could affect some targets, but Nfia could compensate for that as its level of expression is not changed.
 
 ## Check NFIA targets among the differentially expressed genes in MUT-D11 vs WT-D11
 
@@ -578,7 +579,55 @@ Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is 
 
 2) Check known NFIA targets in the developing spinal cord among the genes differentially expressed in p1, p2 and pMN between MUT and WT:
 
-...
+Load the names of the NFIA target genes from the spinal cord:
+
+```{r, include=T}
+spinal.cord.targets = read.delim("../input/NFIA_regulated_genes_in_spinal_cord.tsv",
+                                 header = F)
+
+names(spinal.cord.targets) = c("gene_name", "regulation_mode", "ref", "pmid")
+```
+
+a) Check the spinal cord targets among the genes differentially expressed in p1, MUT-D11 vs WT-D11:
+
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(p1.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp and Plp1 are non-significantly downregulated, which does not make sense, and among the other 7 genes, 4 are down-regulated, as expected, although only Mmd2 is significant.
+
+b) Check the spinal cord targets among the genes differentially expressed in p2, MUT-D11 vs WT-D11:
+
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(p2.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp and Mag are non-significantly down-regulated, which does not make sense, and among the other 7 genes, 6 are down-regulated, as expected, although only Mmd2 and Apcdd1 are significant.
+
+c) Check the spinal cord targets among the genes differentially expressed in pMN, MUT-D11 vs WT-D11:
+
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(pM.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp is  non-significantly down-regulated, which does not make sense; Plp1 is non-significantly up-regulated, as expected; and among the other 7 genes, 5 are down-regulated, as expected, although only Mmd2 and Apcdd1 are significant.
+
+Overall, at least among the genes that should be upregulated by NFIA in the spinal cord, there is a trend of downregulation in MUT-D11 vs WT-D11, as expected, although, only Mmd2 (and Apccd1 in p2 and pMN) are significant. Importantly, this trend is present in all the three domains, and in p2 and pMN there are even more expected down-regulated targets, although, in p2 and pMN the NFIA mutation does not seem to have worked. Hence, the source of the expected downregulation in p2 and pMN is not clear, but because this downregulation is present, I will not count the DEG sets in p2 and pMN as totally "irrelevant" and hence will not subtract them from the DEG set in p1. Instead, I will take the whole DEG set in p1 as a putative reference set: only in p1 both Nfia and Nfib KOs worked to some extent.
 
 ## Generate an alternative reference set of genes in p1 (direct and indirect targets)
 
@@ -668,7 +717,7 @@ pM.norm.counts %>%
                 -pvalue)
 ```
 
-Nfia is downregulated, but insignificantly, likely because of the huge difference in expression between WT-R1 vs WT-R2 and WT-R3. Fos and Aldh1l1 are downregulated but insignificantly, while Apcdd1 is not downregulated and is not significantly regulated. According to the poster, we would not expect Apcdd1 and Aldh1l1 to be regulated in either direction, while Fos indeed may be downregulated. But the main conclusion is that there could be a problem with WT replicates and/or with the Nfia KO (Nfia is likely downregulated just because of the very high expression in WT-R1). 
+Nfia and Nfib are downregulated, as expected, but insignificantly, likely because of the huge difference in expression between WT-R1 vs WT-R2 and WT-R3. Fos and Aldh1l1 are downregulated but insignificantly, while Apcdd1 is not downregulated and is not significantly regulated. According to the poster, we would not expect Apcdd1 and Aldh1l1 to be regulated in either direction, while Fos indeed may be downregulated. But the main conclusion is that there could be a problem with WT replicates and/or with the Nfia KO (Nfia is likely downregulated just because of the very high expression in WT-R1). 
 
 Check the low-expressed genes:
 
@@ -678,10 +727,20 @@ summary(pM.res)
 
 17% does not seem to be too high.
 
-## Find NFIA-independent genes
+Check the spinal cord targets:
 
-- (differentially expressed between MUT and WT in p1 or p2 or pMN at D5 or D7)
-- check NFIA targets
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(pM.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp and Plp1 are upregulated, as expected, but non-significantly, and the log2 fold changes are low; among the other 7 genes, only 3 are downregulated, as expected, but none of them is significant. So, this does not seem to be a relevant change, but this is also D9, when NFIA just starts to be expressed (and NFIB could be delivered even further); consequently, there may not be many real differences anyway.
+
+Consequently, I will not take this set of DEGs as a reference one.
 
 ## Form the final set of NFIA-regulated genes
 
@@ -894,10 +953,408 @@ Overall, there are a lot of differentially expressed genes between D7 and D11 in
 
 ## Check NFIA targets (direct and indirect) among the genes differentially expressed in WT between D11 and D7
 
-...
+1) Check the spinal cord targets in p1, in WT-D11 vs WT-D7:
+
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(p1.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp is not significantly regulated, while Plp1 is significantly upregulated (which does not make sense) and Mag is downregulated, as expected, although DESeq2 could not estimate the significance. Among the other 7 genes, all by Gfap are upregulated, as expected, but only Mmd2, Zcchc24 and Slc1a3 (Glast) are significant. Apcdd1 (the main gliogenesis marker in our system, along with Mmd2 and Zcchc24) demonstrates a two-fold upregulation, which makes sense (although it is not significant).
+
+2) Check the spinal cord targets in p2, in WT-D11 vs WT-D7:
+
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(p2.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp is not significantly regulated, while Plp1 is significantly upregulated (which does not make sense) and Mag is upregulated (which does not make sense either), although DESeq2 could not estimate the significance. Among the other 7 genes, all by Gfap are upregulated, as expected, but only Apcdd1, Mmd2, Zcchc24 and Slc1a3 (Glast) are significant. This is fine, since at least the first 3 genes are the main markers.
+
+3) Check the spinal cord targets in pMN, in WT-D11 vs WT-D7:
+
+```{r, include=T}
+spinal.cord.targets %>%
+  left_join(as.data.frame(pM.res) %>%
+              dplyr::select(log2FoldChange,
+                            padj) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name"))
+```
+
+Mbp and Plp1 are not significantly regulated, while Mag is downregulated, although DESeq2 could not estimate the significance. Among the other 7 genes, all by Gfap are upregulated, as expected, but only Apcdd1, Mmd2, Zcchc24 and Slc1a3 (Glast) are significant. This is fine, since at least the first 3 genes are the main markers.
+
+As DESeq2 cannot estimate the significance of the regulation of Mag and Gfap, there may be a problem with their expression levels in the replicates (pronounced outlier replicates or very low expression).
+
+Overall the main marker genes (Apcdd1, Mmd2 and Zcchc24) and a well-known marker Slc1a3 (Glast) are almost always significantly upregulated, as expected.
 
 ## Form domain-specific final sets of NFIA-regulated genes
 
-...
-- GO-enrichment
+As among the known spinal cord targets only three or four genes are significantly regulated in WT-D11 vs WT-D7, I need to additionally take into account the DEGs from p1, MUT-D11 vs WT-D11 to have more putative targets. Consequently, I will build the final domain-specific sets of NFIA targets in the following way:
 
+1) Unite the DEGs from p1, MUT-D11 vs WT-D11 with the list of the spinal cord targets, obtaining a resulting set R0.
+
+2) In each of the three domains (p1, p2 and pMN), intersect R0 with the DEGs in the domain, WT-D11 vs WT-D7 and take the intersection as the final reference set.
+
+Start by comparing the set of p1 DEGs with the set of the spinal cord targets:
+
+```{r, include=T}
+intersect(p1.degs, spinal.cord.targets$gene_name)
+```
+
+Check the direction of the change in Mmd2 expression in MUT-D11 vs WT-D11 and in WT-D11 vs WT-D7 (they should be opposite):
+
+- In MUT-D11 vs WT-D11: Log2FC = -2.45147941 (adjusted p = 0.002439545).
+
+- In WT-D11 vs WT-D7: Log2FC = 5.0808491 (adjusted p = 3.426263e-10).
+
+As expected. Hence, I can just unite the two sets of genes and exclude one copy of Mmd2:
+
+```{r, include=T}
+p1.mut_wt.res = readRDS("../r_results/diff_expression/tables/deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
+
+r0 = spinal.cord.targets %>%
+  dplyr::select(gene_name,
+                regulation_mode) %>%
+  bind_rows(as.data.frame(p1.mut_wt.res) %>%
+              rownames_to_column(var = "gene_name") %>%
+              filter(gene_name %in% p1.degs) %>%
+              filter(gene_name != "Mmd2") %>%
+              mutate(regulation_mode = ifelse(log2FoldChange < 0, "+", "-")) %>%
+              dplyr::select(gene_name,
+                            regulation_mode)) %>%
+  dplyr::rename("regulation_mode_exp" = "regulation_mode")
+```
+
+1) Form the final set of reference genes for p1:
+
+```{r, include=T}
+p1.ref.genes = r0 %>%
+  left_join(as.data.frame(p1.res) %>%
+              rownames_to_column(var = "gene_name") %>%
+              filter(!is.na(padj)) %>%
+              filter(padj < fdr) %>%
+              mutate(regulation_mode_obs = ifelse(log2FoldChange > 0, "+", "-")) %>%
+              dplyr::select(gene_name,
+                            regulation_mode_obs),
+            by = c("gene_name" = "gene_name")) %>%
+  filter(!is.na(regulation_mode_obs)) %>%
+  filter(regulation_mode_exp == regulation_mode_obs)
+```
+
+The size of the final set of reference genes for p1:
+
+```{r, include=T}
+nrow(p1.ref.genes)
+```
+
+2) Form the final set of reference genes for p2:
+
+```{r, include=T}
+p2.ref.genes = r0 %>%
+  left_join(as.data.frame(p2.res) %>%
+              rownames_to_column(var = "gene_name") %>%
+              filter(!is.na(padj)) %>%
+              filter(padj < fdr) %>%
+              mutate(regulation_mode_obs = ifelse(log2FoldChange > 0, "+", "-")) %>%
+              dplyr::select(gene_name,
+                            regulation_mode_obs),
+            by = c("gene_name" = "gene_name")) %>%
+  filter(!is.na(regulation_mode_obs)) %>%
+  filter(regulation_mode_exp == regulation_mode_obs)
+```
+
+The size of the final set of reference genes for p1:
+
+```{r, include=T}
+nrow(p2.ref.genes)
+```
+
+Almost two times smaller than for p1, which should be explained by the fact that the vast majority of genes in r0 are DEGs from p1, MUT vs WT.
+
+3) Form the final set of reference genes for pMN:
+
+```{r, include=T}
+pM.ref.genes = r0 %>%
+  left_join(as.data.frame(pM.res) %>%
+              rownames_to_column(var = "gene_name") %>%
+              filter(!is.na(padj)) %>%
+              filter(padj < fdr) %>%
+              mutate(regulation_mode_obs = ifelse(log2FoldChange > 0, "+", "-")) %>%
+              dplyr::select(gene_name,
+                            regulation_mode_obs),
+            by = c("gene_name" = "gene_name")) %>%
+  filter(!is.na(regulation_mode_obs)) %>%
+  filter(regulation_mode_exp == regulation_mode_obs)
+```
+
+The size of the final set of reference genes for p1:
+
+```{r, include=T}
+nrow(pM.ref.genes)
+```
+
+Same here.
+
+Check the relevancy of the reference sets of genes by testing the enrichment of REACTOME pathways:
+
+```{r, include=T}
+background.genes = unique(c(p1.degs, p2.degs, pM.degs))
+
+reactome.pathways = msigdb_gsets(species = "Mus musculus", category = "C2", subcategory = "CP:REACTOME")
+
+saveRDS(reactome.pathways, file = "../r_results/reactome_pathways.rds")
+
+p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
+                   reactome.pathways,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(p1.ref.hyp)
+
+p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
+                   reactome.pathways,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(p2.ref.hyp)
+
+pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
+                   reactome.pathways,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(pM.ref.hyp)
+```
+
+No enrichment, so the reference sets of genes may not be more relevant to gliogenesis than the whole set of genes differentially expressed in p1, p2 and pMN between MUT-D11 and WT-D11:
+
+1) Check this whole set (the background from above) against a default background (presumably, "all genes"):
+
+```{r, include=T}
+bkg.hyp = hypeR(background.genes,
+                reactome.pathways,
+                test = "hypergeometric",
+                fdr = fdr)
+
+hyp_show(bkg.hyp)
+```
+
+Some signalling events are enriched. Not sure if this is relevant.
+
+2) Check each of the three DEG sets against the default background:
+
+```{r, include=T}
+p1.degs.hyp = hypeR(p1.degs,
+                    reactome.pathways,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(p1.degs.hyp)
+
+p2.degs.hyp = hypeR(p2.degs,
+                    reactome.pathways,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(p2.degs.hyp)
+
+pM.degs.hyp = hypeR(pM.degs,
+                    reactome.pathways,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(pM.degs.hyp)
+```
+
+Some signalling event is enriched in the p1 DEGs, and the other two DEG sets are not enriched in any pathways. Consequently, the whole set of DEGs in p1, p2 and pMN between MUT-D11 and WT-D11 does not seem to be relevant to development, which is strange, but could be explained by the poor NFIA and NFIB KOs.
+
+Double-check these results using the Biological Process and Molecular Function GO terms:
+
+```{r, include=T}
+go.bp.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:BP")
+
+saveRDS(go.bp.sets, file = "../r_results/go_bp_sets.rds")
+
+go.mf.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:MF")
+
+saveRDS(go.mf.sets, file = "../r_results/go_mf_sets.rds")
+
+p1.degs.hyp = hypeR(p1.degs,
+                    go.bp.sets,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(p1.degs.hyp)
+
+p2.degs.hyp = hypeR(p2.degs,
+                    go.bp.sets,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(p2.degs.hyp)
+
+pM.degs.hyp = hypeR(pM.degs,
+                    go.bp.sets,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(pM.degs.hyp)
+
+p1.degs.hyp = hypeR(p1.degs,
+                    go.mf.sets,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(p1.degs.hyp)
+
+p2.degs.hyp = hypeR(p2.degs,
+                    go.mf.sets,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(p2.degs.hyp)
+
+pM.degs.hyp = hypeR(pM.degs,
+                    go.mf.sets,
+                    test = "hypergeometric",
+                    fdr = fdr)
+
+hyp_show(pM.degs.hyp)
+```
+
+No enrichment, and the signatures do not even intersect with the GO terms. 
+
+Finally, check the same GO terms in the final reference sets. As these sets mostly consist of the DEGs that I checked above, I do not expect any enrichments, but just in case:
+
+```{r, include=T}
+p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
+                   go.bp.sets,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(p1.ref.hyp)
+
+p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
+                   go.bp.sets,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(p2.ref.hyp)
+
+pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
+                   go.bp.sets,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(pM.ref.hyp)
+
+p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
+                   go.mf.sets,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(p1.ref.hyp)
+
+p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
+                   go.mf.sets,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(p2.ref.hyp)
+
+pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
+                   go.mf.sets,
+                   test = "hypergeometric",
+                   background = background.genes,
+                   fdr = fdr)
+
+hyp_show(pM.ref.hyp)
+
+p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
+                   go.bp.sets,
+                   test = "hypergeometric",
+                   fdr = fdr)
+
+hyp_show(p1.ref.hyp)
+
+p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
+                   go.bp.sets,
+                   test = "hypergeometric",
+                   fdr = fdr)
+
+hyp_show(p2.ref.hyp)
+
+pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
+                   go.bp.sets,
+                   test = "hypergeometric",
+                   fdr = fdr)
+
+hyp_show(pM.ref.hyp)
+
+p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
+                   go.mf.sets,
+                   test = "hypergeometric",
+                   fdr = fdr)
+
+hyp_show(p1.ref.hyp)
+
+p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
+                   go.mf.sets,
+                   test = "hypergeometric",
+                   fdr = fdr)
+
+hyp_show(p2.ref.hyp)
+
+pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
+                   go.mf.sets,
+                   test = "hypergeometric",
+                   fdr = fdr)
+
+hyp_show(pM.ref.hyp)
+```
+
+No enrichments and no intersection with the GO terms, as expected.
+
+One last control: check the same pathways and GO terms in the set of known NFIA targets which are certainly relevant to gliogenesis (although, the set may be too small for the enrichment analysis):
+
+```{r, include=T}
+spinal.cord.hyp = hypeR(spinal.cord.targets$gene_name,
+                        reactome.pathways,
+                        test = "hypergeometric",
+                        fdr = fdr)
+
+hyp_show(spinal.cord.hyp)
+
+spinal.cord.hyp = hypeR(spinal.cord.targets$gene_name,
+                        go.bp.sets,
+                        test = "hypergeometric",
+                        fdr = fdr)
+
+hyp_show(spinal.cord.hyp)
+
+spinal.cord.hyp = hypeR(spinal.cord.targets$gene_name,
+                        go.mf.sets,
+                        test = "hypergeometric",
+                        fdr = fdr)
+
+hyp_show(spinal.cord.hyp)
+```
+
+No enrichment either. Consequently, gliogenesis or even the development of the neural system may not be well represented in REACTOME pathways and GO terms, so, overall, the tests are inconclusive, and I will use the final domain-specific gene sets that I generated.
