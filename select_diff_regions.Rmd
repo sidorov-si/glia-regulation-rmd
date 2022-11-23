@@ -202,6 +202,8 @@ p1.nfia.hm.sites.df = writeGFF3(p1.nfia.hm.sites) %>%
   mutate(padj = p.adjust(pvalue, method = "BH")) %>%
   filter(padj < fdr.matches)
 
+saveRDS(p1.nfia.hm.sites.df, file = "../r_results/select_diff_regions/p1_nfia_hm_sites_df.rds")
+
 p1.matched.regions = unique(p1.nfia.hm.sites.df$seqname)
 
 cat("p1:\n")
@@ -230,6 +232,8 @@ p2.nfia.hm.sites.df = writeGFF3(p2.nfia.hm.sites) %>%
   mutate(pvalue = unlist(pvalues(p2.nfia.hm.sites, type = "sampling"))) %>%
   mutate(padj = p.adjust(pvalue, method = "BH")) %>%
   filter(padj < fdr.matches)
+
+saveRDS(p2.nfia.hm.sites.df, file = "../r_results/select_diff_regions/p2_nfia_hm_sites_df.rds")
 
 p2.matched.regions = unique(p2.nfia.hm.sites.df$seqname)
 
@@ -262,6 +266,8 @@ pM.nfia.hm.sites.df = writeGFF3(pM.nfia.hm.sites) %>%
 
 pM.matched.regions = unique(pM.nfia.hm.sites.df$seqname)
 
+saveRDS(pM.nfia.hm.sites.df, file = "../r_results/select_diff_regions/pM_nfia_hm_sites_df.rds")
+
 cat("pMN:\n")
 
 cat("Number of matched significantly regulated regions      :", length(unique(pM.nfia.hm.sites.df$seqname)), "\n")
@@ -278,5 +284,21 @@ cat("Number of matched significantly downregulated regions  :",
 Select significantly upregulated regions with NFIA matches:
 
 ```{r, include=T}
+p1.up.nfia.names = p1.matched.regions[p1.matched.regions %in% p1.up.ranges@ranges@NAMES]
 
+p1.up.nfia.ranges = p1.up.ranges[p1.up.ranges@ranges@NAMES %in% p1.up.nfia.names]
+
+saveRDS(p1.up.nfia.ranges, file = "../r_results/select_diff_regions/p1_up_nfia_ranges.rds")
+
+p2.up.nfia.names = p2.matched.regions[p2.matched.regions %in% p2.up.ranges@ranges@NAMES]
+
+p2.up.nfia.ranges = p2.up.ranges[p2.up.ranges@ranges@NAMES %in% p2.up.nfia.names]
+
+saveRDS(p2.up.nfia.ranges, file = "../r_results/select_diff_regions/p2_up_nfia_ranges.rds")
+
+pM.up.nfia.names = pM.matched.regions[pM.matched.regions %in% pM.up.ranges@ranges@NAMES]
+
+pM.up.nfia.ranges = pM.up.ranges[pM.up.ranges@ranges@NAMES %in% pM.up.nfia.names]
+
+saveRDS(pM.up.nfia.ranges, file = "../r_results/select_diff_regions/pM_up_nfia_ranges.rds")
 ```
