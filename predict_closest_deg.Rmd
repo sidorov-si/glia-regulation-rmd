@@ -1,0 +1,74 @@
+---
+title: "predict_closest_deg"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+dyn.load("/home/rstudio/libs/libxml2.so.2")
+library(dplyr)
+library(GenomicRanges)
+dyn.load("/home/rstudio/libs/libgsl.so.25")
+dyn.load("/home/rstudio/libs/libgslcblas.so.0")
+library(tibble)
+library(Biostrings)
+library(rtracklayer)
+```
+
+Set FDR:
+
+```{r, include=T}
+fdr = 0.05
+```
+
+## Find genomic coordinates of DEGs from WT-D11 vs WT-D7
+
+Upload the genome annotation for mm10 and select only genes:
+
+```{r, include=T}
+# The last mm10 annotation in GENCODE before they moved to mm39
+mm10.annot = rtracklayer::import(con = "../input/gencode.vM25.annotation.gtf",
+                                 format = "gtf")
+
+mm10.annot.genes = mm10.annot[mm10.annot$type == "gene"]
+```
+
+Select DEGs in the mm10 annotation:
+
+```{r, include = T}
+p1.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds"))
+
+p1.res.sign.gene_names = p1.res %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  pull(gene_name)
+
+p1.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p1.res.sign.gene_names]
+
+p2.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds"))
+
+p2.res.sign.gene_names = p2.res %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  pull(gene_name)
+
+p2.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p2.res.sign.gene_names]
+
+pM.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds"))
+
+pM.res.sign.gene_names = pM.res %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(!is.na(padj)) %>%
+  filter(padj < fdr) %>%
+  pull(gene_name)
+
+pM.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% pM.res.sign.gene_names]
+```
+
+Find the genomic coordinates of genes differentially expressed between WT-D11 and WT-D7 in p1, p2 and pMN:
+
+## Predict NFIA targets in p1, p2 and pMN as closest DEGs
+
+
