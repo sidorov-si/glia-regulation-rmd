@@ -742,10 +742,6 @@ Mbp and Plp1 are upregulated, as expected, but non-significantly, and the log2 f
 
 Consequently, I will not take this set of DEGs as a reference one.
 
-## Form the final set of NFIA-regulated genes
-
-...
-
 ## Find genes differentially expressed between D7 (NFIA-) and D11 (NFIA+) in WT
 
 1) Find differentially expressed genes in p1 in D11-WT vs D7-WT:
@@ -1048,6 +1044,8 @@ p1.ref.genes = r0 %>%
             by = c("gene_name" = "gene_name")) %>%
   filter(!is.na(regulation_mode_obs)) %>%
   filter(regulation_mode_exp == regulation_mode_obs)
+
+saveRDS(p1.ref.genes, file = "../r_results/diff_expression/tables/p1_ref_genes.rds")
 ```
 
 The size of the final set of reference genes for p1:
@@ -1070,6 +1068,8 @@ p2.ref.genes = r0 %>%
             by = c("gene_name" = "gene_name")) %>%
   filter(!is.na(regulation_mode_obs)) %>%
   filter(regulation_mode_exp == regulation_mode_obs)
+
+saveRDS(p2.ref.genes, file = "../r_results/diff_expression/tables/p2_ref_genes.rds")
 ```
 
 The size of the final set of reference genes for p1:
@@ -1094,6 +1094,8 @@ pM.ref.genes = r0 %>%
             by = c("gene_name" = "gene_name")) %>%
   filter(!is.na(regulation_mode_obs)) %>%
   filter(regulation_mode_exp == regulation_mode_obs)
+
+saveRDS(pM.ref.genes, file = "../r_results/diff_expression/tables/pM_ref_genes.rds")
 ```
 
 The size of the final set of reference genes for p1:

@@ -33,7 +33,7 @@ mm10.annot = rtracklayer::import(con = "../input/gencode.vM25.annotation.gtf",
 mm10.annot.genes = mm10.annot[mm10.annot$type == "gene"]
 ```
 
-Select DEGs in the mm10 annotation:
+Find the genomic coordinates of genes differentially expressed between WT-D11 and WT-D7 in p1, p2 and pMN:
 
 ```{r, include = T}
 p1.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds"))
@@ -67,8 +67,62 @@ pM.res.sign.gene_names = pM.res %>%
 pM.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% pM.res.sign.gene_names]
 ```
 
-Find the genomic coordinates of genes differentially expressed between WT-D11 and WT-D7 in p1, p2 and pMN:
-
 ## Predict NFIA targets in p1, p2 and pMN as closest DEGs
 
+Upload upregulated regions with at least one NFIA motif match:
 
+```{r, include=T}
+p1.up.nfia.ranges = readRDS("../r_results/select_diff_regions/p1_up_nfia_ranges.rds")
+
+p2.up.nfia.ranges = readRDS("../r_results/select_diff_regions/p2_up_nfia_ranges.rds")
+
+pM.up.nfia.ranges = readRDS("../r_results/select_diff_regions/pM_up_nfia_ranges.rds")
+```
+
+For each upregulated region that contains at least one NFIA motif match, find the closest differentially expressed gene:
+
+```{r, include=T}
+p1.nfia.targets.nums = GenomicRanges::nearest(p1.up.nfia.ranges, p1.deg.annot)
+
+p1.nfia.targets = unique(p1.deg.annot[p1.nfia.targets.nums]$gene_name)
+
+p2.nfia.targets.nums = GenomicRanges::nearest(p2.up.nfia.ranges, p2.deg.annot)
+
+p2.nfia.targets = unique(p2.deg.annot[p2.nfia.targets.nums]$gene_name)
+
+pM.nfia.targets.nums = GenomicRanges::nearest(pM.up.nfia.ranges, pM.deg.annot)
+
+pM.nfia.targets = unique(pM.deg.annot[pM.nfia.targets.nums]$gene_name)
+```
+
+Check if the sets of predicted targets intersect with the corresponding domain-specific reference sets:
+
+```{r, include=T}
+p1.ref.genes.names = readRDS("../r_results/diff_expression/tables/p1_ref_genes.rds")$gene_name
+
+p2.ref.genes.names = readRDS("../r_results/diff_expression/tables/p2_ref_genes.rds")$gene_name
+
+pM.ref.genes.names = readRDS("../r_results/diff_expression/tables/pM_ref_genes.rds")$gene_name
+
+cat("The number of predicted reference genes:", length(p1.ref.genes.names[p1.ref.genes.names %in% p1.nfia.targets]), "(", round(length(p1.ref.genes.names[p1.ref.genes.names %in% p1.nfia.targets]) / length(p1.ref.genes.names) * 100, 2), "%)\n")
+
+cat("The number of predicted reference genes:", length(p2.ref.genes.names[p2.ref.genes.names %in% p2.nfia.targets]), "(", round(length(p2.ref.genes.names[p2.ref.genes.names %in% p2.nfia.targets]) / length(p2.ref.genes.names) * 100, 2), "%)\n")
+
+cat("The number of predicted reference genes:", length(pM.ref.genes.names[pM.ref.genes.names %in% pM.nfia.targets]), "(", round(length(pM.ref.genes.names[pM.ref.genes.names %in% pM.nfia.targets]) / length(pM.ref.genes.names) * 100, 2), "%)\n")
+```
+
+These percentages suggest random choice of predicted genes from the whole set of differentially expressed genes in each domain. Indeed, in each domain, predicted genes comprise about a half of all differentially expressed genes, and if the predicted genes were chosen at random, then about a half of the set of reference genes would be chosen, which is exactly what we observed above (the percentage of predicted genes among the reference ones varied from 48 to 53).
+
+Check if the 3 main markers of gliogenesis in our system (Apcdd1, Mmd2 and Zcchc24), which are likely to be direct targets, are among the predicted reference genes:
+
+```{r, include=T}
+marker.genes = c("Apcdd1", "Mmd2", "Zcchc24", "Slc1a3")
+
+p1.nfia.targets[p1.nfia.targets %in% marker.genes]
+
+p2.nfia.targets[p2.nfia.targets %in% marker.genes]
+
+pM.nfia.targets[pM.nfia.targets %in% marker.genes]
+```
+
+According to the sets of significantly differentially expressed genes, we expect only Mmd2 to be predicted in p1, Apcdd1 and Mmd2 to be predicted in p2, and all the three targets to be predicted in pMN. However, Mmd2 is not predicted in p1, and only Apcdd1 is predicted in p2 and pMN. Consequently, taking the closest gene is still a too rough way of target prediction, even taking into account the differential gene expression.
