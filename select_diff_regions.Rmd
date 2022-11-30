@@ -212,21 +212,15 @@ pM.matched.regions = scan.tf.motif(domain.name = "pM",
 Select NFIA-dependent regions with NFIA matches:
 
 ```{r, include=T}
-p1.up.nfia.names = p1.matched.regions[p1.matched.regions %in% p1.up.ranges@ranges@NAMES]
+p1.dep.nfia.ranges = p1.dep.ranges[p1.dep.ranges@ranges@NAMES %in% p1.matched.regions]
 
-p1.up.nfia.ranges = p1.up.ranges[p1.up.ranges@ranges@NAMES %in% p1.up.nfia.names]
+saveRDS(p1.dep.nfia.ranges, file = "../r_results/select_diff_regions/p1_dep_nfia_ranges.rds")
 
-saveRDS(p1.up.nfia.ranges, file = "../r_results/select_diff_regions/p1_up_nfia_ranges.rds")
+p2.dep.nfia.ranges = p2.dep.ranges[p2.dep.ranges@ranges@NAMES %in% p2.matched.regions]
 
-p2.up.nfia.names = p2.matched.regions[p2.matched.regions %in% p2.up.ranges@ranges@NAMES]
+saveRDS(p2.dep.nfia.ranges, file = "../r_results/select_diff_regions/p2_dep_nfia_ranges.rds")
 
-p2.up.nfia.ranges = p2.up.ranges[p2.up.ranges@ranges@NAMES %in% p2.up.nfia.names]
+pM.dep.nfia.ranges = pM.dep.ranges[pM.dep.ranges@ranges@NAMES %in% pM.matched.regions]
 
-saveRDS(p2.up.nfia.ranges, file = "../r_results/select_diff_regions/p2_up_nfia_ranges.rds")
-
-pM.up.nfia.names = pM.matched.regions[pM.matched.regions %in% pM.up.ranges@ranges@NAMES]
-
-pM.up.nfia.ranges = pM.up.ranges[pM.up.ranges@ranges@NAMES %in% pM.up.nfia.names]
-
-saveRDS(pM.up.nfia.ranges, file = "../r_results/select_diff_regions/pM_up_nfia_ranges.rds")
+saveRDS(pM.dep.nfia.ranges, file = "../r_results/select_diff_regions/pM_dep_nfia_ranges.rds")
 ```
