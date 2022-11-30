@@ -17,406 +17,223 @@ library(TFBSTools)
 library(Biostrings)
 ```
 
-Set FDR:
+Set significance parameters:
 
 ```{r, include=T}
+# Joaquina
 fdr = 0.01
+min.l2fc = 2 # Min log2(fold change)
+min.baseMean = 100
 ```
 
-## Differential accessibility in p1
-
-Find differentially accessible elements in p1:
+Prepare the general function for the analysis of differential accessibility:
 
 ```{r, include=T}
-p1 = read.delim("../results/select_samples/featureCounts_WT_D7_p1_vs_WT_D11_p1.tsv") %>%
+analyse_diff_accessibility = function(cond.target.long, cond.ref.long, 
+                                      cond.target.short, cond.ref.short) {
+  # Find differentially accessible regions
+  p = read.delim(paste0("../results/select_samples/featureCounts_",  
+                 cond.ref.long, "_vs_", cond.target.long, ".tsv")) %>%
   dplyr::select(-X)
 
-names(p1) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p1))
-
-p1.ann = p1[, c(1:6)]
-
-p1.clean = p1[, !(names(p1) %in% names(p1)[1:6])]
-
-rownames(p1.clean) = p1.ann$Geneid
-
-p1.cond = data.frame(condition = stringr::str_extract(names(p1.clean), "D(7|11)"))
-
-row.names(p1.cond) = names(p1.clean)
-
-p1.cond$condition = factor(p1.cond$condition, levels = c("D7", "D11"))
-
-p1.dds = DESeqDataSetFromMatrix(countData = p1.clean,
-                                colData = p1.cond,
-                                design = ~ condition)
-p1.dds = DESeq(p1.dds)
-
-p1.res = results(p1.dds, contrast = c("condition", "D11", "D7"), alpha = fdr)
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-cat("Number of significantly differentially accessible elements (FDR = 1%):", 
-    sum(p1.res$padj < fdr, na.rm = T), 
+  names(p) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p))
+  
+  p.ann = p[, c(1:6)]
+  
+  p.clean = p[, !(names(p) %in% names(p)[1:6])]
+  
+  rownames(p.clean) = p.ann$Geneid
+  
+  p.cond = data.frame(condition = stringr::str_extract(names(p.clean), 
+                                                       paste0("(", cond.target.short, "|", cond.ref.short, ")")))
+  
+  row.names(p.cond) = names(p.clean)
+  
+  p.cond$condition = factor(p.cond$condition, levels = c(cond.target.short, cond.ref.short))
+  
+  p.dds = DESeqDataSetFromMatrix(countData = p.clean,
+                                 colData = p.cond,
+                                 design = ~ condition)
+  p.dds = DESeq(p.dds)
+  
+  p.res = results(p.dds, contrast = c("condition", cond.target.short, cond.ref.short), alpha = fdr)
+  
+  # Print out stats
+  cat(cond.target.long, "vs", cond.ref.long, "\n")
+  
+  cat("Number of significantly differentially accessible elements (FDR =", round(fdr * 100, 0), "%):", 
+    sum(p.res$padj < fdr & abs(p.res$log2FoldChange) > min.l2fc & p.res$baseMean > min.baseMean, na.rm = T), 
     "\n")
 
-p1.n.up = nrow(as.data.frame(p1.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange > 0))
+  p.n.up = nrow(as.data.frame(p.res) %>% 
+    filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+    filter(log2FoldChange > 0))
+  
+  cat("Number of upregulated elements (FDR =", round(fdr * 100, 0), "%):", 
+      p.n.up,
+      "\n")
+  
+  p.n.down = nrow(as.data.frame(p.res) %>% 
+    filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+    filter(log2FoldChange < 0))
+  
+  cat("Number of downregulated elements (FDR =", round(fdr * 100, 0), "%):", 
+      p.n.down,
+      "\n")
+  
+  p.n.all = nrow(as.data.frame(p.res))
+  
+  cat("The total number of elements:",
+      p.n.all,
+      "\n")
+  
+  cat("The percentage of significantly differentially accessible elements:",
+      round((p.n.up + p.n.down) / p.n.all * 100, 2))
+  
+  cat("\n")
+  
+  # Do PCA
+  p.rld = rlog(p.dds)
+  
+  # Based on the code from DESeq2 vignette:
+  # https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
+  p.pcaData = plotPCA(p.rld, returnData = T)
+  
+  p.percentVar = round(100 * attr(p.pcaData, "percentVar"), 2)
+  
+  pca.plot = ggplot(p.pcaData, aes(PC1, PC2, color = condition)) +
+    geom_point(size = 2) +
+    xlab(paste0("PC1: ", p.percentVar[1], "% variance")) +
+    ylab(paste0("PC2: ", p.percentVar[2], "% variance")) + 
+    #coord_fixed() +
+    theme_classic()
+  
+  ggsave(filename = paste0("../r_results/diff_accessibility/plots/pca_", cond.target.long, "_vs_", cond.ref.long,
+                           "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".pdf"),
+         plot = pca.plot)
+  
+  # Plot the proportions of differentially regulated regions
+  p.freq.up = p.n.up / p.n.all
 
-cat("Number of upregulated elements (FDR = 1%):", 
-    p1.n.up,
-    "\n")
-
-p1.n.down = nrow(as.data.frame(p1.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0))
-
-cat("Number of downregulated elements (FDR = 1%):", 
-    p1.n.down,
-    "\n")
-
-p1.n.all = nrow(as.data.frame(p1.res))
-
-cat("The total number of elements:",
-    p1.n.all,
-    "\n")
-
-cat("The percentage of significantly differentially accessible elements:",
-    round((p1.n.up + p1.n.down) / p1.n.all * 100, 2))
+  p.freq.down = p.n.down / p.n.all
+  
+  p.freq.nonsign = 1 - p.freq.up - p.freq.down
+  
+  p.freq.df = data.frame(freq     = c(p.freq.up, p.freq.down, p.freq.nonsign),
+                         category = c("Up",      "Down",      "Non-significant"),
+                         element_type = "Elements") %>%
+    dplyr::mutate(category = factor(category, levels = category))
+  
+  proportions.plot = ggplot(p.freq.df) +
+    geom_col(aes(x = element_type,
+                 y = freq,
+                 fill = category)) + 
+    theme_classic()
+  
+  ggsave(filename = paste0("../r_results/diff_accessibility/plots/deg-proportions_", cond.target.long, "_vs_", cond.ref.long, 
+                           "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".pdf"),
+         plot = proportions.plot)
+  
+  # Save the result DESeq table
+  saveRDS(p.res, file = paste0("../r_results/diff_accessibility/tables/deseq2-results_", cond.target.long, "_vs_", cond.ref.long, 
+                               "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+  
+  return(p.res)
+}
 ```
 
-Print the names of coefficients:
-
-```{r}
-resultsNames(p1.dds)
-```
-
-Make an MA plot with variation shrinkage:
-
-```{r}
-plotMA(lfcShrink(p1.dds, coef = 2, type = "apeglm"))
-```
-
-Do PCA:
+## Find regions differentially regulated in WT-D11 vs WT-D7
 
 ```{r, include=T}
-p1.rld = rlog(p1.dds)
-
-# Based on the code from DESeq2 vignette: https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
-p1.pcaData = plotPCA(p1.rld, returnData = T)
-
-p1.percentVar = round(100 * attr(p1.pcaData, "percentVar"), 2)
-
-p = ggplot(p1.pcaData, aes(PC1, PC2, color = condition)) +
-  geom_point(size = 2) +
-  xlab(paste0("PC1: ", p1.percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", p1.percentVar[2], "% variance")) + 
-  coord_fixed() +
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/p1_gliogenesis_diff_accesibility_D11_vs_D7_pca.pdf",
-       plot = p)
+# p1
+p1.11.7.res = analyse_diff_accessibility(cond.target.long =  "WT_D11_p1",
+                                         cond.ref.long =     "WT_D7_p1",
+                                         cond.target.short = "D11",
+                                         cond.ref.short =    "D7")
+# p2
+p2.11.7.res = analyse_diff_accessibility(cond.target.long =  "WT_D11_p2",
+                                         cond.ref.long =     "WT_D7_p2",
+                                         cond.target.short = "D11",
+                                         cond.ref.short =    "D7")
+# pMN
+pM.11.7.res = analyse_diff_accessibility(cond.target.long =  "WT_D11_pM",
+                                         cond.ref.long =     "WT_D7_pM",
+                                         cond.target.short = "D11",
+                                         cond.ref.short =    "D7")
 ```
 
-Plot proportions of differentially accessible elements:
+Upregulated regions outnumber downregulated regions by 2-3 times, which is expected if NFIA massively opens up chromatin.
+
+## Find regions differentially regulated in MUT-D11 vs WT-D11
 
 ```{r, include=T}
-p1.freq.up = p1.n.up / p1.n.all
-
-p1.freq.down = p1.n.down / p1.n.all
-
-p1.freq.nonsign = 1 - p1.freq.up - p1.freq.down
-
-p1.freq.df = data.frame(freq     = c(p1.freq.up, p1.freq.down, p1.freq.nonsign),
-                        category = c("Up",       "Down",       "Non-significant"),
-                        element_type = "Elements") %>%
-  dplyr::mutate(category = factor(category, levels = category))
-
-p = ggplot(p1.freq.df) +
-  geom_col(aes(x = element_type,
-               y = freq,
-               fill = category)) + 
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/p1_gliogenesis_diff_accesibility_D11_vs_D7_proportions.pdf",
-       plot = p)
+# p1
+p1.mut.wt.res = analyse_diff_accessibility(cond.target.long  = "MUT_D11_p1",
+                                           cond.ref.long     = "WT_D11_p1",
+                                           cond.target.short = "MUT",
+                                           cond.ref.short    = "WT")
+# p2
+p2.mut.wt.res = analyse_diff_accessibility(cond.target.long  = "MUT_D11_p2",
+                                           cond.ref.long     = "WT_D11_p2",
+                                           cond.target.short = "MUT",
+                                           cond.ref.short    = "WT")
+# pMN
+pM.mut.wt.res = analyse_diff_accessibility(cond.target.long  = "MUT_D11_pM",
+                                           cond.ref.long     = "WT_D11_pM",
+                                           cond.target.short = "MUT",
+                                           cond.ref.short    = "WT")
 ```
 
-Save the DESeq2 output table as an RDS object:
+Almost all significantly regulated regions are downregulated, which is exactly as expected with NFIA's function of opening chromatin in WT.
+
+## Find regions with NFIA-dependent accessibility in WT-D11 vs WT-D7
+
+For each domain, intersect the set of regions upregulated in WT-D11 vs WT-D7 with the set of regions downregulated in MUT-D11 vs WT-D11:
 
 ```{r, include=T}
-saveRDS(p1.res, file = "../r_results/diff_accessibility/p1_deseq2_results.rds")
-```
-
-## Differential accessibility in p2
-
-Find differentially accessible elements in p2:
-
-```{r, include=T}
-p2 = read.delim("../results/select_samples/featureCounts_WT_D7_p2_vs_WT_D11_p2.tsv") %>%
-  dplyr::select(-X)
-
-names(p2) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p2))
-
-p2.ann = p2[, c(1:6)]
-
-p2.clean = p2[, !(names(p2) %in% names(p2)[1:6])]
-
-rownames(p2.clean) = p2.ann$Geneid
-
-p2.cond = data.frame(condition = stringr::str_extract(names(p2.clean), "D(7|11)"))
-
-row.names(p2.cond) = names(p2.clean)
-
-p2.cond$condition = factor(p2.cond$condition, levels = c("D7", "D11"))
-
-p2.dds = DESeqDataSetFromMatrix(countData = p2.clean,
-                                colData = p2.cond,
-                                design = ~ condition)
-p2.dds = DESeq(p2.dds)
-
-p2.res = results(p2.dds, contrast = c("condition", "D11", "D7"), alpha = fdr)
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-cat("Number of significantly differentially accessible elements (FDR = 1%):", 
-    sum(p2.res$padj < fdr, na.rm = T), 
-    "\n")
-
-p2.n.up = nrow(as.data.frame(p2.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange > 0))
-
-cat("Number of upregulated elements (FDR = 1%):", 
-    p2.n.up,
-    "\n")
-
-p2.n.down = nrow(as.data.frame(p2.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0))
-
-cat("Number of downregulated elements (FDR = 1%):", 
-    p2.n.down,
-    "\n")
-
-p2.n.all = nrow(as.data.frame(p2.res))
-
-cat("The total number of elements:",
-    p2.n.all,
-    "\n")
-
-cat("The percentage of significantly differentially accessible elements:",
-    round((p2.n.up + p2.n.down) / p2.n.all * 100, 2))
-```
-
-Print the names of coefficients:
-
-```{r}
-resultsNames(p2.dds)
-```
-
-Make an MA plot with variation shrinkage:
-
-```{r}
-plotMA(lfcShrink(p2.dds, coef = 2, type = "apeglm"))
-```
-
-Do PCA:
-
-```{r, include=T}
-p2.rld = rlog(p2.dds)
-
-# Based on the code from DESeq2 vignette: https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
-p2.pcaData = plotPCA(p2.rld, returnData = T)
-
-p2.percentVar = round(100 * attr(p2.pcaData, "percentVar"), 2)
-
-p = ggplot(p2.pcaData, aes(PC1, PC2, color = condition)) +
-  geom_point(size = 2) +
-  xlab(paste0("PC1: ", p2.percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", p2.percentVar[2], "% variance")) + 
-  ylim(-3, 3) +
-  coord_fixed() +
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/p2_gliogenesis_diff_accesibility_D11_vs_D7_pca.pdf",
-       plot = p)
-```
-
-Plot proportions of differentially accessible elements:
-
-```{r, include=T}
-p2.freq.up = p2.n.up / p2.n.all
-
-p2.freq.down = p2.n.down / p2.n.all
-
-p2.freq.nonsign = 1 - p2.freq.up - p2.freq.down
-
-p2.freq.df = data.frame(freq     = c(p2.freq.up, p2.freq.down, p2.freq.nonsign),
-                        category = c("Up",       "Down",       "Non-significant"),
-                        element_type = "Elements") %>%
-  dplyr::mutate(category = factor(category, levels = category))
-
-p = ggplot(p2.freq.df) +
-  geom_col(aes(x = element_type,
-               y = freq,
-               fill = category)) + 
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/p2_gliogenesis_diff_accesibility_D11_vs_D7_proportions.pdf",
-       plot = p)
-```
-
-Save the DESeq2 output table as an RDS object:
-
-```{r, include=T}
-saveRDS(p2.res, file = "../r_results/diff_accessibility/p2_deseq2_results.rds")
-```
-
-## Differential accessibility in pMN
-
-Find differentially accessible elements in pMN:
-
-```{r, include=T}
-pMN = read.delim("../results/select_samples/featureCounts_WT_D7_pM_vs_WT_D11_pM.tsv") %>%
-  dplyr::select(-X)
-
-names(pMN) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(pMN))
-
-pMN.ann = pMN[, c(1:6)]
-
-pMN.clean = pMN[, !(names(pMN) %in% names(pMN)[1:6])]
-
-rownames(pMN.clean) = pMN.ann$Geneid
-
-pMN.cond = data.frame(condition = stringr::str_extract(names(pMN.clean), "D(7|11)"))
-
-row.names(pMN.cond) = names(pMN.clean)
-
-pMN.cond$condition = factor(pMN.cond$condition, levels = c("D7", "D11"))
-
-pMN.dds = DESeqDataSetFromMatrix(countData = pMN.clean,
-                                colData = pMN.cond,
-                                design = ~ condition)
-pMN.dds = DESeq(pMN.dds)
-
-pMN.res = results(pMN.dds, contrast = c("condition", "D11", "D7"), alpha = fdr)
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-cat("Number of significantly differentially accessible elements (FDR = 1%):", 
-    sum(pMN.res$padj < fdr, na.rm = T), 
-    "\n")
-
-pMN.n.up = nrow(as.data.frame(pMN.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange > 0))
-
-cat("Number of upregulated elements (FDR = 1%):", 
-    pMN.n.up,
-    "\n")
-
-pMN.n.down = nrow(as.data.frame(pMN.res) %>% 
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0))
-
-cat("Number of downregulated elements (FDR = 1%):", 
-    pMN.n.down,
-    "\n")
-
-pMN.n.all = nrow(as.data.frame(pMN.res))
-
-cat("The total number of elements:",
-    pMN.n.all,
-    "\n")
-
-cat("The percentage of significantly differentially accessible elements:",
-    round((pMN.n.up + pMN.n.down) / pMN.n.all * 100, 2))
-```
-
-Print the names of coefficients:
-
-```{r}
-resultsNames(pMN.dds)
-```
-
-Make an MA plot with variation shrinkage:
-
-```{r}
-plotMA(lfcShrink(pMN.dds, coef = 2, type = "apeglm"))
-```
-
-Do PCA:
-
-```{r, include=T}
-pMN.rld = rlog(pMN.dds)
-
-# Based on the code from DESeq2 vignette: https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples
-pMN.pcaData = plotPCA(pMN.rld, returnData = T)
-
-pMN.percentVar = round(100 * attr(pMN.pcaData, "percentVar"), 2)
-
-p = ggplot(pMN.pcaData, aes(PC1, PC2, color = condition)) +
-  geom_point(size = 2) +
-  xlab(paste0("PC1: ", pMN.percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", pMN.percentVar[2], "% variance")) + 
-  ylim(-3.5, 3.5) +  
-  coord_fixed() +
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/pMN_gliogenesis_diff_accesibility_D11_vs_D7_pca.pdf",
-       plot = p)
-```
-
-Plot proportions of differentially accessible elements:
-
-```{r, include=T}
-pMN.freq.up = pMN.n.up / pMN.n.all
-
-pMN.freq.down = pMN.n.down / pMN.n.all
-
-pMN.freq.nonsign = 1 - pMN.freq.up - pMN.freq.down
-
-pMN.freq.df = data.frame(freq     = c(pMN.freq.up, pMN.freq.down, pMN.freq.nonsign),
-                        category = c("Up",       "Down",       "Non-significant"),
-                        element_type = "Elements") %>%
-  dplyr::mutate(category = factor(category, levels = category))
-
-p = ggplot(pMN.freq.df) +
-  geom_col(aes(x = element_type,
-               y = freq,
-               fill = category)) + 
-  theme_classic()
-
-p
-
-ggsave(filename = "../r_results/diff_accessibility/pMN_gliogenesis_diff_accesibility_D11_vs_D7_proportions.pdf",
-       plot = p)
-```
-
-Save the DESeq2 output table as an RDS object:
-
-```{r, include=T}
-saveRDS(pMN.res, file = "../r_results/diff_accessibility/pMN_deseq2_results.rds")
+# Regions upregulated in WT-D11 vs WT-D7
+p1.11.7.res.up = as.data.frame(p1.11.7.res) %>% 
+  filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+  filter(log2FoldChange > 0) %>% 
+  rownames()
+
+p2.11.7.res.up = as.data.frame(p2.11.7.res) %>% 
+  filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+  filter(log2FoldChange > 0) %>% 
+  rownames()
+
+pM.11.7.res.up = as.data.frame(pM.11.7.res) %>% 
+  filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+  filter(log2FoldChange > 0) %>% 
+  rownames()
+
+# Regions downregulated in MUT-D11 vs WT-D11
+p1.mut.wt.res.down = as.data.frame(p1.mut.wt.res) %>% 
+  filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+  filter(log2FoldChange < 0) %>% 
+  rownames()
+
+p2.mut.wt.res.down = as.data.frame(p2.mut.wt.res) %>% 
+  filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+  filter(log2FoldChange < 0) %>% 
+  rownames()
+
+pM.mut.wt.res.down = as.data.frame(pM.mut.wt.res) %>% 
+  filter(padj < fdr & abs(log2FoldChange) > min.l2fc & baseMean > min.baseMean) %>%
+  filter(log2FoldChange < 0) %>% 
+  rownames()
+
+# NFIA-dependent regions upregulated in WT-D11 vs WT-D7
+p1.11.7.dep = intersect(p1.11.7.res.up, p1.mut.wt.res.down)
+
+p2.11.7.dep = intersect(p2.11.7.res.up, p2.mut.wt.res.down)
+
+pM.11.7.dep = intersect(pM.11.7.res.up, pM.mut.wt.res.down)
+
+# Save these sets of genes
+saveRDS(p1.11.7.dep, file = "../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep.tsv")
+
+saveRDS(p2.11.7.dep, file = "../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep.tsv")
+
+saveRDS(pM.11.7.dep, file = "../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep.tsv")
 ```

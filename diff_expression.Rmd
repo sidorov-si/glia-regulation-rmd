@@ -165,10 +165,10 @@ master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts
 
 ## Generate the reference set of genes in p1 (direct and indirect targets)
 
-Find differentially expressed genes in p1 in D11-MUT vs D11-WT:
+1) Find differentially expressed genes in p1 in D11-MUT vs D11-WT:
 
 ```{r, include=T}
-p1.raw = master.table %>%
+p1.mut.wt.raw = master.table %>%
   dplyr::select(MUT_D11_p1_NFIAn_R2,
                 MUT_D11_p1_NFIAn_R3,
                 WT_D11_p1_NFIAp_R2,
@@ -179,295 +179,314 @@ p1.raw = master.table %>%
 # is convenient for extracting sample names for a given condition 
 # from the header of the master table.
 
-p1.cond.raw = data.frame(condition = stringr::str_extract(names(p1.raw), "(MUT|WT)"))
+p1.mut.wt.cond.raw = data.frame(condition = stringr::str_extract(names(p1.mut.wt.raw), "(MUT|WT)"))
 
-diff.levels = c("MUT", "WT")
+diff.levels.mut.wt = c("MUT", "WT")
 
-p1.results = diff_expression(p1.raw, p1.cond.raw, diff.levels, "deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
+p1.mut.wt.results = diff_expression(p1.mut.wt.raw, p1.mut.wt.cond.raw, diff.levels.mut.wt, "deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
 
-p1.res = p1.results[["results_object"]]
+p1.mut.wt.res = p1.mut.wt.results[["results_object"]]
 ```
 
 Print a summary of the results:
 
 ```{r, include=T}
-p1.deg_proportions = print_de_summary(p1.res)
+p1.deg_proportions = print_de_summary(p1.mut.wt.res)
 ```
 
 Do PCA:
 
 ```{r, include=T}
-p1.pca = deg_pca(p1.results[["deseq_object"]], "pca_diff-expression_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.pdf")
+p1.mut.wt.pca = deg_pca(p1.mut.wt.results[["deseq_object"]], "pca_diff-expression_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.pdf")
 
-# p1.pca
+# p1.mut.wt.pca
 ```
 
 The main difference is not between the conditions, but between on WT sample and the other three samples, which explains the minute number of differentially expressed genes.
 
-## Generate the reference set of genes in p2 (direct and indirect targets)
-
-Find differentially expressed genes in p2 in D11-MUT vs D11-WT:
+2) Find differentially expressed genes in p1 in D11-WT vs D7-WT:
 
 ```{r, include=T}
-p2.raw = master.table %>%
+p1.11.7.raw = master.table %>%
+  dplyr::select(WT_D11_p1_NFIAp_R2,
+                WT_D11_p1_NFIAp_R3,
+                WT_D7_p1_NFIAn_R1,
+                WT_D7_p1_NFIAn_R2,
+                WT_D7_p1_NFIAn_R3)
+
+p1.11.7.cond.raw = data.frame(condition = stringr::str_extract(names(p1.11.7.raw), "(D11|D7)"))
+
+diff.levels = c("D11", "D7")
+
+p1.11.7.results = diff_expression(p1.11.7.raw, p1.11.7.cond.raw, diff.levels, "deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds")
+
+p1.11.7.res = p1.11.7.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+p1.11.7.deg_proportions = print_de_summary(p1.11.7.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+p1.11.7.pca = deg_pca(p1.11.7.results[["deseq_object"]], "pca_diff-expression_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.pdf")
+
+# p1.11.7.pca
+```
+
+The two conditions are very well separated by PC1.
+
+Check the expression of Nfia across the two conditions:
+
+```{r, include=T}
+p1.11.7.dds = p1.11.7.results[["deseq_object"]]
+
+p1.11.7.dds = estimateSizeFactors(p1.11.7.dds)
+
+p1.11.7.norm.counts = counts(p1.11.7.dds, normalized = T)
+
+p1.11.7.norm.counts %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name == "Nfia") %>%
+  left_join(as.data.frame(p1.11.7.res) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name")) %>%
+  dplyr::select(-baseMean,
+                -lfcSE,
+                -stat,
+                -pvalue)
+```
+
+Exactly as expected, Nfia is significantly upregulated.
+
+3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the p1-specific set of reference genes: a reference gene should be significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7:
+
+```{r, include=T}
+p1.degs.mut.wt = as.data.frame(p1.mut.wt.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+p1.degs.11.7 = as.data.frame(p1.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0) %>%
+  pull(gene_name)
+
+p1.ref.genes = intersect(p1.degs.mut.wt, p1.degs.11.7)
+
+cat("Number of p1 reference genes:", length(p1.ref.genes), "\n")
+
+saveRDS(p1.ref.genes, file = "../r_results/diff_expression/tables/p1_ref_genes.rds")
+```
+
+## Generate the reference set of genes in p2 (direct and indirect targets)
+
+1) Find differentially expressed genes in p2 in D11-MUT vs D11-WT:
+
+```{r, include=T}
+p2.mut.wt.raw = master.table %>%
   dplyr::select(MUT_D11_p2_NFIAn_R2,
                 MUT_D11_p2_NFIAn_R3,
                 WT_D11_p2_NFIAp_R2,
                 WT_D11_p2_NFIAp_R3)
 
-p2.cond.raw = data.frame(condition = stringr::str_extract(names(p2.raw), "(MUT|WT)"))
+p2.mut.wt.cond.raw = data.frame(condition = stringr::str_extract(names(p2.mut.wt.raw), "(MUT|WT)"))
 
 diff.levels = c("MUT", "WT")
 
-p2.results = diff_expression(p2.raw, p2.cond.raw, diff.levels, "deseq-results_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.rds")
+p2.mut.wt.results = diff_expression(p2.mut.wt.raw, p2.mut.wt.cond.raw, diff.levels, "deseq-results_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.rds")
 
-p2.res = p2.results[["results_object"]]
+p2.mut.wt.res = p2.mut.wt.results[["results_object"]]
 ```
 
 Print a summary of the results:
 
 ```{r, include=T}
-p2.deg_proportions = print_de_summary(p2.res)
+p2.mut.wt.deg_proportions = print_de_summary(p2.mut.wt.res)
 ```
 
 Do PCA:
 
 ```{r, include=T}
-p2.pca = deg_pca(p2.results[["deseq_object"]], "pca_diff-expression_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.pdf")
+p2.mut.wt.pca = deg_pca(p2.mut.wt.results[["deseq_object"]], "pca_diff-expression_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.pdf")
 
-# p2.pca
+# p2.mut.wt.pca
 ```
 
 The conditions are separated by PC2, but it explains only 22% of the variance, and the samples from the same condition are still quite far apart; hence, the minute number of differentially expressed genes.
 
-## Generate the reference set of genes in pMN (direct and indirect targets)
-
-Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
+2) Find differentially expressed genes in p2 in D11-WT vs D7-WT:
 
 ```{r, include=T}
-pM.raw = master.table %>%
+p2.11.7.raw = master.table %>%
+  dplyr::select(WT_D11_p2_NFIAp_R2,
+                WT_D11_p2_NFIAp_R3,
+                WT_D7_p2_NFIAn_R1,
+                WT_D7_p2_NFIAn_R2,
+                WT_D7_p2_NFIAn_R3)
+
+p2.11.7.cond.raw = data.frame(condition = stringr::str_extract(names(p2.11.7.raw), "(D11|D7)"))
+
+diff.levels = c("D11", "D7")
+
+p2.11.7.results = diff_expression(p2.11.7.raw, p2.11.7.cond.raw, diff.levels, "deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds")
+
+p2.11.7.res = p2.11.7.results[["results_object"]]
+```
+
+Print a summary of the results:
+
+```{r, include=T}
+p2.11.7.deg_proportions = print_de_summary(p2.11.7.res)
+```
+
+Do PCA:
+
+```{r, include=T}
+p2.11.7.pca = deg_pca(p2.11.7.results[["deseq_object"]], "pca_diff-expression_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.pdf")
+
+# p2.11.7.pca
+```
+
+The two conditions are very well separated by PC1.
+
+Check the expression of Nfia across the two conditions:
+
+```{r, include=T}
+p2.11.7.dds = p2.11.7.results[["deseq_object"]]
+
+p2.11.7.dds = estimateSizeFactors(p2.11.7.dds)
+
+p2.11.7.norm.counts = counts(p2.11.7.dds, normalized = T)
+
+p2.11.7.norm.counts %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name == "Nfia") %>%
+  left_join(as.data.frame(p2.11.7.res) %>%
+              rownames_to_column(var = "gene_name"),
+            by = c("gene_name" = "gene_name")) %>%
+  dplyr::select(-baseMean,
+                -lfcSE,
+                -stat,
+                -pvalue)
+```
+
+Exactly as expected, Nfia is significantly upregulated. 
+
+3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the p2-specific set of reference genes: a reference gene should be significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7:
+
+```{r, include=T}
+p2.degs.mut.wt = as.data.frame(p2.mut.wt.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+p2.degs.11.7 = as.data.frame(p2.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0) %>%
+  pull(gene_name)
+
+p2.ref.genes = intersect(p2.degs.mut.wt, p2.degs.11.7)
+
+cat("Number of p2 reference genes:", length(p2.ref.genes), "\n")
+
+saveRDS(p2.ref.genes, file = "../r_results/diff_expression/tables/p2_ref_genes.rds")
+```
+
+## Generate the reference set of genes in pMN (direct and indirect targets)
+
+1) Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
+
+```{r, include=T}
+pM.mut.wt.raw = master.table %>%
   dplyr::select(MUT_D11_pM_NFIAn_R2,
                 MUT_D11_pM_NFIAn_R3,
                 WT_D11_pM_NFIAp_R2,
                 WT_D11_pM_NFIAp_R3)
 
-pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
+pM.mut.wt.cond.raw = data.frame(condition = stringr::str_extract(names(pM.mut.wt.raw), "(MUT|WT)"))
 
 diff.levels = c("MUT", "WT")
 
-pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
+pM.mut.wt.results = diff_expression(pM.mut.wt.raw, pM.mut.wt.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
 
-pM.res = pM.results[["results_object"]]
+pM.mut.wt.res = pM.mut.wt.results[["results_object"]]
 ```
 
 Print a summary of the results:
 
 ```{r, include=T}
-pM.deg_proportions = print_de_summary(pM.res)
+pM.mut.wt.deg_proportions = print_de_summary(pM.mut.wt.res)
 ```
 
 Do PCA:
 
 ```{r, include=T}
-pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.pdf")
+pM.mut.wt.pca = deg_pca(pM.mut.wt.results[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.pdf")
 
 # pM.pca
 ```
 
 The conditions are separated by PC1, and it explains 71% of the variance; however, the samples from the same condition are still quite far apart from each other. Hence, although there are more differentially expressed genes in pMNs, than in p1 or p2, but still not many.
 
-As there are almost no differentially expressed genes between p{1,2,M}-MUT-D11-NFIAn and p{1,2,M}-WT-D11-NFIAp, while we would expect a considerable number, do some additional checks, taking pMN as an example.
-
-## Check low-expressed genes in all comparisons
-
-Use the `summary()` function from DESeq2 to see low-count genes. If there are a lot of them, then the libraries may be contaminated (for example, with the ribosomal RNA) and so not represent the true RNA diversity; hence, only a low number of differentially expressed genes.
-
-1) Summary of MUT-D11 vs WT-D11 in p1:
+2) Find differentially expressed genes in pMN in D11-WT vs D7-WT:
 
 ```{r, include=T}
-summary(p1.res)
+pM.11.7.raw = master.table %>%
+  dplyr::select(WT_D11_pM_NFIAp_R2,
+                WT_D11_pM_NFIAp_R3,
+                WT_D7_pM_NFIAn_R1,
+                WT_D7_pM_NFIAn_R2,
+                WT_D7_pM_NFIAn_R3)
+
+pM.11.7.cond.raw = data.frame(condition = stringr::str_extract(names(pM.11.7.raw), "(D11|D7)"))
+
+diff.levels = c("D11", "D7")
+
+pM.11.7.results = diff_expression(pM.11.7.raw, pM.11.7.cond.raw, diff.levels, "deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds")
+
+pM.11.7.res = pM.11.7.results[["results_object"]]
 ```
 
-2) Summary of MUT-D11 vs WT-D11 in p2:
+Print a summary of the results:
 
 ```{r, include=T}
-summary(p2.res)
+pM.11.7.deg_proportions = print_de_summary(pM.11.7.res)
 ```
 
-3) Summary of MUT-D11 vs WT-D11 in pMN:
+Do PCA:
 
 ```{r, include=T}
-summary(pM.res)
+pM.11.7.pca = deg_pca(pM.11.7.results[["deseq_object"]], "pca_diff-expression_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.pdf")
+
+# p1.11.7.pca
 ```
 
-All the three percentages of low-expressed genes are fine (not really high). So, I cannot say anything about a possible contamination from this.
+The two conditions are very well separated by PC1.
 
-## Vary parameters of the differential gene expression analysis
-
-1) Show that rising FDR to 10% does not change the number of differential genes dramatically:
+Check the expression of Nfia across the two conditions:
 
 ```{r, include=T}
-fdr = 0.1
+pM.11.7.dds = pM.11.7.results[["deseq_object"]]
 
-pM.results.10 = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_fdr10pc.rds")
+pM.11.7.dds = estimateSizeFactors(pM.11.7.dds)
 
-pM.res.10 = pM.results[["results_object"]]
+pM.11.7.norm.counts = counts(pM.11.7.dds, normalized = T)
 
-pM.deg_proportions.10 = print_de_summary(pM.res.10)
-
-fdr = 0.05
-```
-
-249 differentially expressed genes, instead of 183 before; hence, not a big difference.
-
-2) Show that the use of the scaled counts does not make any difference:
-
-a) Use `salmon.merged.gene_counts_scaled.rds`:
-
-Load the master table:
-
-```{r, include=T}
-master.table.scaled = assays(readRDS("../input/salmon.merged.gene_counts_scaled.rds"))$counts
-```
-
-Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
-
-```{r, include=T}
-pM.raw.scaled = master.table.scaled %>%
-  dplyr::select(MUT_D11_pM_NFIAn_R2,
-                MUT_D11_pM_NFIAn_R3,
-                WT_D11_pM_NFIAp_R2,
-                WT_D11_pM_NFIAp_R3)
-
-pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw.scaled), "(MUT|WT)"))
-
-diff.levels = c("MUT", "WT")
-
-pM.results.scaled = diff_expression(pM.raw.scaled, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_scaled.rds")
-
-pM.res.scaled = pM.results.scaled[["results_object"]]
-
-pM.deg_proportions.scaled = print_de_summary(pM.res.scaled)
-
-pM.pca.scaled = deg_pca(pM.results.scaled[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_scaled.pdf")
-
-# pM.pca.scaled
-```
-
-165 differentially expressed genes, instead of 183; even a smaller set.
-
-b) Use `salmon.merged.gene_counts_length_scaled.rds`:
-
-Load the master table:
-
-```{r, include=T}
-master.table.scaled = assays(readRDS("../input/salmon.merged.gene_counts_length_scaled.rds"))$counts
-```
-
-Find differentially expressed genes in pMN in D11-MUT vs D11-WT:
-
-```{r, include=T}
-pM.raw.scaled = master.table.scaled %>%
-  dplyr::select(MUT_D11_pM_NFIAn_R2,
-                MUT_D11_pM_NFIAn_R3,
-                WT_D11_pM_NFIAp_R2,
-                WT_D11_pM_NFIAp_R3)
-
-pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw.scaled), "(MUT|WT)"))
-
-diff.levels = c("MUT", "WT")
-
-pM.results.scaled = diff_expression(pM.raw.scaled, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_scaled.rds")
-
-pM.res.scaled = pM.results.scaled[["results_object"]]
-
-pM.deg_proportions.scaled = print_de_summary(pM.res.scaled)
-
-pM.pca.scaled = deg_pca(pM.results.scaled[["deseq_object"]], "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_scaled.pdf")
-
-# pM.pca.scaled
-```
-
-183 differentially expressed genes again.
-
-3) Show that pre-filtering of genes by max(expression) >= 10 (with the independent filtering in DESeq2 turned off) does not make any difference:
-
-```{r, include=T}
-max_count_cutoff = 10
-
-pM.raw = master.table %>%
-  dplyr::select(MUT_D11_pM_NFIAn_R2,
-                MUT_D11_pM_NFIAn_R3,
-                WT_D11_pM_NFIAp_R2,
-                WT_D11_pM_NFIAp_R3)
-
-pM.sample.names = names(pM.raw)
-
-pM.raw = pM.raw %>%
-  tibble::rownames_to_column(var = "gene_name") %>%
-  rowwise() %>%
-  mutate(max_count = max(c_across(all_of(pM.sample.names)))) %>%
-  ungroup() %>%
-  filter(max_count >= max_count_cutoff) %>%
-  as.data.frame() %>%
-  dplyr::select(-max_count) %>%
-  tibble::column_to_rownames(var = "gene_name")
-
-pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
-
-diff.levels = c("MUT", "WT")
-
-pM = round(pM.raw)
-  
-row.names(pM.cond) = names(pM)
-
-pM.cond$condition = factor(pM.cond$condition, levels = diff.levels)
-
-pM.dds = DESeqDataSetFromMatrix(countData = pM,
-                                colData = pM.cond,
-                                design = ~ condition)
-
-pM.dds = DESeq(pM.dds)
-
-pM.res = results(pM.dds, 
-                 contrast = c("condition", diff.levels[1], diff.levels[2]), 
-                 alpha = fdr,
-                 independentFiltering = F)
-
-saveRDS(pM.res, file = paste0("../r_results/diff_expression/tables/",
-                              "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_length_expr-gte10.rds"))
-
-pM.deg_proportions = print_de_summary(pM.res)
-
-pM.pca = deg_pca(pM.dds, "pca_diff-expression_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp_expr-gte10.pdf")
-
-# pM.pca
-```
-
-172 differentially expressed genes, instead of 183; hence, not a big difference. The smaller number of differentially expressed genes obtained after the pre-filtering by max TPM means that the independent filtering by DESeq2 is more efficient (in terms of the number of rejected null hypotheses) than max TPM pre-filtering.
-
-## Check the regulation of the genes from Isabel's poster
-
-```{r, include=t}
-control.genes = c("Apcdd1", "Aldh1l1", "Fos", "Nfia", "Nfib")
-```
-
-Here I show gene expression counts normalized by DESeq2 (https://hbctraining.github.io/DGE_workshop_salmon/lessons/02_DGE_count_normalization.html), that is, the counts that are used by DESeq2 to perform the differential gene expression analysis.
-
-1) Regulation of Apcdd1, Aldh1l1, Fos and Nfia in p1 between MUT-D11 and WT-D11:
-
-```{r, include=T}
-p1.dds = p1.results[["deseq_object"]]
-
-p1.dds = estimateSizeFactors(p1.dds)
-
-p1.norm.counts = counts(p1.dds, normalized = T)
-
-p1.norm.counts %>%
+pM.11.7.norm.counts %>%
   as.data.frame() %>%
   rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(p1.res) %>%
+  filter(gene_name == "Nfia") %>%
+  left_join(as.data.frame(pM.11.7.res) %>%
               rownames_to_column(var = "gene_name"),
             by = c("gene_name" = "gene_name")) %>%
   dplyr::select(-baseMean,
@@ -476,108 +495,33 @@ p1.norm.counts %>%
                 -pvalue)
 ```
 
-Aldh1l1, Fos, Nfia and Nfib are down-regulated, as expected. Apcdd1 is insignificantly upregulated, which does not contradict the graph on the poster. Surprisingly, Nfia and Nfib are not significantly downregulated.
+Exactly as expected, Nfia is significantly upregulated.
 
-2) Regulation of Apcdd1, Aldh1l1, Fos, Nfia and Nfib in p2 between MUT-D11 and WT-D11:
-
-```{r, include=T}
-p2.dds = p2.results[["deseq_object"]]
-
-p2.dds = estimateSizeFactors(p2.dds)
-
-p2.norm.counts = counts(p2.dds, normalized = T)
-
-p2.norm.counts %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(p2.res) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name")) %>%
-  dplyr::select(-baseMean,
-                -lfcSE,
-                -stat,
-                -pvalue)
-```
-
-Strikingly, Nfia is not downregulated, and is not significantly regulated, according to DESeq2. This may highlight a problem with the KO. Nfib is downregulated, but not significantly, and the log2 fold change is not substantial. The other three genes are downregulated, as expected, and even significantly so. But the fact that Nfia and Nfib are not significantly downregulated means that the genes that are differentially expressed between MUT-D11 and WT-D11 in p2 are likely perturbed not because of the (insignificant) change in the Nfia or Nfib expression, but because of some other reasons. Consequently, I need to check, if this set of differentially expressed genes intersects with the other two sets (in p1 and pMN), as the intersection may be a group of genes whose expression does not actually depend on the Nfia expression.
-
-3) Regulation of Apcdd1, Aldh1l1, Fos, Nfia and Nfib in pMN between MUT-D11 and WT-D11:
+3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the pMN-specific set of reference genes: a reference gene should be significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7:
 
 ```{r, include=T}
-pM.raw = master.table %>%
-  dplyr::select(MUT_D11_pM_NFIAn_R2,
-                MUT_D11_pM_NFIAn_R3,
-                WT_D11_pM_NFIAp_R2,
-                WT_D11_pM_NFIAp_R3)
-
-pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
-
-diff.levels = c("MUT", "WT")
-
-pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
-
-pM.dds = pM.results[["deseq_object"]]
-
-pM.res = pM.results[["results_object"]]
-
-pM.dds = estimateSizeFactors(pM.dds)
-
-pM.norm.counts = counts(pM.dds, normalized = T)
-
-pM.norm.counts %>%
-  as.data.frame() %>%
+pM.degs.mut.wt = as.data.frame(pM.mut.wt.res) %>%
   rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(pM.res) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name")) %>%
-  dplyr::select(-baseMean,
-                -lfcSE,
-                -stat,
-                -pvalue)
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+pM.degs.11.7 = as.data.frame(pM.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0) %>%
+  pull(gene_name)
+
+pM.ref.genes = intersect(pM.degs.mut.wt, pM.degs.11.7)
+
+cat("Number of pM reference genes:", length(pM.ref.genes), "\n")
+
+saveRDS(pM.ref.genes, file = "../r_results/diff_expression/tables/pM_ref_genes.rds")
 ```
 
-Same here! Seems to be a problem with the Nfia and Nfib KO. And hence, the even greater number of differentially expressed genes in MUT-D11 vs WT-D11 could be produced not by the changes in the Nfia or Nfib expression. On the other hand, Nfib demonstrates a two-fold downregulation, so it could affect some targets, but Nfia could compensate for that as its level of expression is not changed.
+## Check known NFIA targets (direct or indirect) among the reference genes
 
-## Check NFIA targets among the differentially expressed genes in MUT-D11 vs WT-D11
-
-1) Check the intersection between the genes differentially expressed in p1 and in p2/pMN:
-
-```{r, include=T}
-p1.degs = p1.res %>%
-  as.data.frame() %>%
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  rownames_to_column(var = "gene_name") %>%
-  pull(gene_name)
-
-p2.degs = p2.res %>%
-  as.data.frame() %>%
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  rownames_to_column(var = "gene_name") %>%
-  pull(gene_name)
-
-pM.degs = pM.res %>%
-  as.data.frame() %>%
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
-  rownames_to_column(var = "gene_name") %>%
-  pull(gene_name)
-
-cat("Number of DEGs in p1,  MUT-D11 vs WT-D11          :", length(p1.degs), "\n")
-cat("Number of DEGs in p2,  MUT-D11 vs WT-D11          :", length(p2.degs), "\n")
-cat("Number of DEGs in pMN, MUT-D11 vs WT-D11          :", length(pM.degs), "\n")
-cat("Number of DEGs in common between p2 and p1        :", length(intersect(p1.degs, p2.degs)), "\n")
-cat("Number of DEGs in common between pMN and p1       :", length(intersect(p1.degs, pM.degs)), "\n")
-cat("Number of DEGs in common between (pMN + p2) and p1:", length(intersect(p1.degs, union(pM.degs, p2.degs))), "\n")
-cat("Number of DEGs in common between pMN and p2       :", length(intersect(p2.degs, pM.degs)), "\n")
-```
-
-Only 25 DEGs are shared between the union of the p2 and pMN DEGs, where Nfia is not downregulated and hence we do not expect DEGs to depend on Nfia, and p1 DEGs, where Nfia is significantly downregulated. Consequently, I suppose that the majority of 76 DEGs in p1 are indeed the direct or indirect targets of Nfia, and so the set for p1, although much smaller than the other two sets, could be more reliable.
-
-2) Check known NFIA targets in the developing spinal cord among the genes differentially expressed in p1, p2 and pMN between MUT and WT:
+Check known NFIA targets in the developing spinal cord among the reference genes for each domains.
 
 Load the names of the NFIA target genes from the spinal cord:
 
@@ -588,775 +532,20 @@ spinal.cord.targets = read.delim("../input/NFIA_regulated_genes_in_spinal_cord.t
 names(spinal.cord.targets) = c("gene_name", "regulation_mode", "ref", "pmid")
 ```
 
-a) Check the spinal cord targets among the genes differentially expressed in p1, MUT-D11 vs WT-D11:
+a) Check the spinal cord targets among the p1-specific reference genes:
 
 ```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(p1.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
+p1.ref.genes[p1.ref.genes %in% spinal.cord.targets$gene_name]
 ```
 
-Mbp and Plp1 are non-significantly downregulated, which does not make sense, and among the other 7 genes, 4 are down-regulated, as expected, although only Mmd2 is significant.
-
-b) Check the spinal cord targets among the genes differentially expressed in p2, MUT-D11 vs WT-D11:
+b) Check the spinal cord targets among the p2-specific reference genes:
 
 ```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(p2.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
+p2.ref.genes[p2.ref.genes %in% spinal.cord.targets$gene_name]
 ```
 
-Mbp and Mag are non-significantly down-regulated, which does not make sense, and among the other 7 genes, 6 are down-regulated, as expected, although only Mmd2 and Apcdd1 are significant.
-
-c) Check the spinal cord targets among the genes differentially expressed in pMN, MUT-D11 vs WT-D11:
+c) Check the spinal cord targets among the pMN-specific reference genes:
 
 ```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(pM.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
+pM.ref.genes[pM.ref.genes %in% spinal.cord.targets$gene_name]
 ```
-
-Mbp is  non-significantly down-regulated, which does not make sense; Plp1 is non-significantly up-regulated, as expected; and among the other 7 genes, 5 are down-regulated, as expected, although only Mmd2 and Apcdd1 are significant.
-
-Overall, at least among the genes that should be upregulated by NFIA in the spinal cord, there is a trend of downregulation in MUT-D11 vs WT-D11, as expected, although, only Mmd2 (and Apccd1 in p2 and pMN) are significant. Importantly, this trend is present in all the three domains, and in p2 and pMN there are even more expected down-regulated targets, although, in p2 and pMN the NFIA mutation does not seem to have worked. Hence, the source of the expected downregulation in p2 and pMN is not clear, but because this downregulation is present, I will not count the DEG sets in p2 and pMN as totally "irrelevant" and hence will not subtract them from the DEG set in p1. Instead, I will take the whole DEG set in p1 as a putative reference set: only in p1 both Nfia and Nfib KOs worked to some extent.
-
-## Generate an alternative reference set of genes in p1 (direct and indirect targets)
-
-As the number of differentially expressed genes in all the three domains between MUT-D11 and WT-D11 is very small, try a differential expression analysis at D9, when NFIA starts to be expressed. If it shows more differentially expressed genes (and if NFIA is significantly downregulated at D9!), I may use the results as a reference set, also taking into account that these results should be enriched in the direct NFIA targets.
-
-There are no NFIAp samples for D9-WT in p1:
-
-```{r, include=T}
-unlist(stringr::str_match_all(names(master.table), "WT_D9_p1.*"))
-```
-
-so I cannot compare NFIA-expressing p1 cells with the mutant ones.
-
-Additionally, there is only one replicate for MUT-D9 in p2:
-
-```{r, include=T}
-unlist(stringr::str_match_all(names(master.table), "MUT_D9_p2.*"))
-```
-
-which precludes the differential gene expression analysis in MUT-D9 vs WT-D9 in p2.
-
-However, in pMN there are both more than one replicate of WT-D9-NFIAp and of MUT-D9-NFIAn:
-
-```{r, include=T}
-unlist(stringr::str_match_all(names(master.table), "MUT_D9_pM.*"))
-unlist(stringr::str_match_all(names(master.table), "WT_D9_pM_NFIAp.*"))
-```
-
-hence, I will do the differential gene expression analysis at D9 only for pMN.
-
-Find differentially expressed genes in pMN in D9-MUT vs D9-WT:
-
-```{r, include=T}
-pM.raw = master.table %>%
-  dplyr::select(MUT_D9_pM_NFIAn_R1,
-                MUT_D9_pM_NFIAn_R3,
-                WT_D9_pM_NFIAp_R1,
-                WT_D9_pM_NFIAp_R2,
-                WT_D9_pM_NFIAp_R3)
-
-pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(MUT|WT)"))
-
-diff.levels = c("MUT", "WT")
-
-pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-MUT-D9-NFIAn_vs_pM-WT-D9-NFIAp.rds")
-
-pM.res = pM.results[["results_object"]]
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-pM.deg_proportions = print_de_summary(pM.res)
-```
-
-Same low number of differentially expressed genes.
-
-Do PCA:
-
-```{r, include=T}
-pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-MUT-D9-NFIAn_vs_pM-WT-D9-NFIAp.pdf")
-
-# p1.pca
-```
-
-The two conditions are separated by PC2 which explains 32% of the variation.
-
-Check the poster genes and Nfia in MUT-D9 vs WT-D9 in pMN:
-
-```{r, include=T}
-pM.dds = pM.results[["deseq_object"]]
-
-pM.dds = estimateSizeFactors(pM.dds)
-
-pM.norm.counts = counts(pM.dds, normalized = T)
-
-pM.norm.counts %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(pM.res) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name")) %>%
-  dplyr::select(-baseMean,
-                -lfcSE,
-                -stat,
-                -pvalue)
-```
-
-Nfia and Nfib are downregulated, as expected, but insignificantly, likely because of the huge difference in expression between WT-R1 vs WT-R2 and WT-R3. Fos and Aldh1l1 are downregulated but insignificantly, while Apcdd1 is not downregulated and is not significantly regulated. According to the poster, we would not expect Apcdd1 and Aldh1l1 to be regulated in either direction, while Fos indeed may be downregulated. But the main conclusion is that there could be a problem with WT replicates and/or with the Nfia KO (Nfia is likely downregulated just because of the very high expression in WT-R1). 
-
-Check the low-expressed genes:
-
-```{r, include=T}
-summary(pM.res)
-```
-
-17% does not seem to be too high.
-
-Check the spinal cord targets:
-
-```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(pM.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
-```
-
-Mbp and Plp1 are upregulated, as expected, but non-significantly, and the log2 fold changes are low; among the other 7 genes, only 3 are downregulated, as expected, but none of them is significant. So, this does not seem to be a relevant change, but this is also D9, when NFIA just starts to be expressed (and NFIB could be delivered even further); consequently, there may not be many real differences anyway.
-
-Consequently, I will not take this set of DEGs as a reference one.
-
-## Find genes differentially expressed between D7 (NFIA-) and D11 (NFIA+) in WT
-
-1) Find differentially expressed genes in p1 in D11-WT vs D7-WT:
-
-```{r, include=T}
-p1.raw = master.table %>%
-  dplyr::select(WT_D11_p1_NFIAp_R2,
-                WT_D11_p1_NFIAp_R3,
-                WT_D7_p1_NFIAn_R1,
-                WT_D7_p1_NFIAn_R2,
-                WT_D7_p1_NFIAn_R3)
-
-p1.cond.raw = data.frame(condition = stringr::str_extract(names(p1.raw), "(D11|D7)"))
-
-diff.levels = c("D11", "D7")
-
-p1.results = diff_expression(p1.raw, p1.cond.raw, diff.levels, "deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds")
-
-p1.res = p1.results[["results_object"]]
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-p1.deg_proportions = print_de_summary(p1.res)
-```
-
-Do PCA:
-
-```{r, include=T}
-p1.pca = deg_pca(p1.results[["deseq_object"]], "pca_diff-expression_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.pdf")
-
-# p1.pca
-```
-
-The two conditions are very well separated by PC1.
-
-Check the expression of Nfia across the two conditions:
-
-```{r, include=T}
-p1.dds = p1.results[["deseq_object"]]
-
-p1.dds = estimateSizeFactors(p1.dds)
-
-p1.norm.counts = counts(p1.dds, normalized = T)
-
-p1.norm.counts %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(p1.res) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name")) %>%
-  dplyr::select(-baseMean,
-                -lfcSE,
-                -stat,
-                -pvalue)
-```
-
-Exactly as expected, Nfia is significantly upregulated, and so are Fos and Aldh1l1 but not Apcdd1.
-
-Check the number of low-expressed genes:
-
-```{r, include=T}
-summary(p1.res)
-```
-
-Same as in other comparisons.
-
-2) Find differentially expressed genes in p2 in D11-WT vs D7-WT:
-
-```{r, include=T}
-p2.raw = master.table %>%
-  dplyr::select(WT_D11_p2_NFIAp_R2,
-                WT_D11_p2_NFIAp_R3,
-                WT_D7_p2_NFIAn_R1,
-                WT_D7_p2_NFIAn_R2,
-                WT_D7_p2_NFIAn_R3)
-
-p2.cond.raw = data.frame(condition = stringr::str_extract(names(p2.raw), "(D11|D7)"))
-
-diff.levels = c("D11", "D7")
-
-p2.results = diff_expression(p2.raw, p2.cond.raw, diff.levels, "deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds")
-
-p2.res = p2.results[["results_object"]]
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-p2.deg_proportions = print_de_summary(p2.res)
-```
-
-Do PCA:
-
-```{r, include=T}
-p2.pca = deg_pca(p2.results[["deseq_object"]], "pca_diff-expression_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.pdf")
-
-# p1.pca
-```
-
-The two conditions are very well separated by PC1.
-
-Check the expression of Nfia across the two conditions:
-
-```{r, include=T}
-p2.dds = p2.results[["deseq_object"]]
-
-p2.dds = estimateSizeFactors(p2.dds)
-
-p2.norm.counts = counts(p2.dds, normalized = T)
-
-p2.norm.counts %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(p2.res) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name")) %>%
-  dplyr::select(-baseMean,
-                -lfcSE,
-                -stat,
-                -pvalue)
-```
-
-Exactly as expected, Nfia is significantly upregulated, and so are Apcdd1, Aldh1l1 and Fos. 
-
-Check the number of low-expressed genes:
-
-```{r, include=T}
-summary(p2.res)
-```
-
-Same as in other comparisons.
-
-3) Find differentially expressed genes in pMN in D11-WT vs D7-WT:
-
-```{r, include=T}
-pM.raw = master.table %>%
-  dplyr::select(WT_D11_pM_NFIAp_R2,
-                WT_D11_pM_NFIAp_R3,
-                WT_D7_pM_NFIAn_R1,
-                WT_D7_pM_NFIAn_R2,
-                WT_D7_pM_NFIAn_R3)
-
-pM.cond.raw = data.frame(condition = stringr::str_extract(names(pM.raw), "(D11|D7)"))
-
-diff.levels = c("D11", "D7")
-
-pM.results = diff_expression(pM.raw, pM.cond.raw, diff.levels, "deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds")
-
-pM.res = pM.results[["results_object"]]
-```
-
-Print a summary of the results:
-
-```{r, include=T}
-pM.deg_proportions = print_de_summary(pM.res)
-```
-
-Do PCA:
-
-```{r, include=T}
-pM.pca = deg_pca(pM.results[["deseq_object"]], "pca_diff-expression_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.pdf")
-
-# p1.pca
-```
-
-The two conditions are very well separated by PC1.
-
-Check the expression of Nfia across the two conditions:
-
-```{r, include=T}
-pM.dds = pM.results[["deseq_object"]]
-
-pM.dds = estimateSizeFactors(pM.dds)
-
-pM.norm.counts = counts(pM.dds, normalized = T)
-
-pM.norm.counts %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(gene_name %in% control.genes) %>%
-  left_join(as.data.frame(pM.res) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name")) %>%
-  dplyr::select(-baseMean,
-                -lfcSE,
-                -stat,
-                -pvalue)
-```
-
-Exactly as expected, Nfia is significantly upregulated, and so are Apcdd1, Aldh1l1 and Fos. 
-
-Check the number of low-expressed genes:
-
-```{r, include=T}
-summary(pM.res)
-```
-
-Same as in other comparisons.
-
-Overall, there are a lot of differentially expressed genes between D7 and D11 in p1, p2 and pMN, as expected. And also, as expected, Nfia is differentially upregulated in D11 vs D7.
-
-## Check NFIA targets (direct and indirect) among the genes differentially expressed in WT between D11 and D7
-
-1) Check the spinal cord targets in p1, in WT-D11 vs WT-D7:
-
-```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(p1.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
-```
-
-Mbp is not significantly regulated, while Plp1 is significantly upregulated (which does not make sense) and Mag is downregulated, as expected, although DESeq2 could not estimate the significance. Among the other 7 genes, all by Gfap are upregulated, as expected, but only Mmd2, Zcchc24 and Slc1a3 (Glast) are significant. Apcdd1 (the main gliogenesis marker in our system, along with Mmd2 and Zcchc24) demonstrates a two-fold upregulation, which makes sense (although it is not significant).
-
-2) Check the spinal cord targets in p2, in WT-D11 vs WT-D7:
-
-```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(p2.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
-```
-
-Mbp is not significantly regulated, while Plp1 is significantly upregulated (which does not make sense) and Mag is upregulated (which does not make sense either), although DESeq2 could not estimate the significance. Among the other 7 genes, all by Gfap are upregulated, as expected, but only Apcdd1, Mmd2, Zcchc24 and Slc1a3 (Glast) are significant. This is fine, since at least the first 3 genes are the main markers.
-
-3) Check the spinal cord targets in pMN, in WT-D11 vs WT-D7:
-
-```{r, include=T}
-spinal.cord.targets %>%
-  left_join(as.data.frame(pM.res) %>%
-              dplyr::select(log2FoldChange,
-                            padj) %>%
-              rownames_to_column(var = "gene_name"),
-            by = c("gene_name" = "gene_name"))
-```
-
-Mbp and Plp1 are not significantly regulated, while Mag is downregulated, although DESeq2 could not estimate the significance. Among the other 7 genes, all by Gfap are upregulated, as expected, but only Apcdd1, Mmd2, Zcchc24 and Slc1a3 (Glast) are significant. This is fine, since at least the first 3 genes are the main markers.
-
-As DESeq2 cannot estimate the significance of the regulation of Mag and Gfap, there may be a problem with their expression levels in the replicates (pronounced outlier replicates or very low expression).
-
-Overall the main marker genes (Apcdd1, Mmd2 and Zcchc24) and a well-known marker Slc1a3 (Glast) are almost always significantly upregulated, as expected.
-
-## Form domain-specific final sets of NFIA-regulated genes
-
-As among the known spinal cord targets only three or four genes are significantly regulated in WT-D11 vs WT-D7, I need to additionally take into account the DEGs from p1, MUT-D11 vs WT-D11 to have more putative targets. Consequently, I will build the final domain-specific sets of NFIA targets in the following way:
-
-1) Unite the DEGs from p1, MUT-D11 vs WT-D11 with the list of the spinal cord targets, obtaining a resulting set R0.
-
-2) In each of the three domains (p1, p2 and pMN), intersect R0 with the DEGs in the domain, WT-D11 vs WT-D7 and take the intersection as the final reference set.
-
-Start by comparing the set of p1 DEGs with the set of the spinal cord targets:
-
-```{r, include=T}
-intersect(p1.degs, spinal.cord.targets$gene_name)
-```
-
-Check the direction of the change in Mmd2 expression in MUT-D11 vs WT-D11 and in WT-D11 vs WT-D7 (they should be opposite):
-
-- In MUT-D11 vs WT-D11: Log2FC = -2.45147941 (adjusted p = 0.002439545).
-
-- In WT-D11 vs WT-D7: Log2FC = 5.0808491 (adjusted p = 3.426263e-10).
-
-As expected. Hence, I can just unite the two sets of genes and exclude one copy of Mmd2:
-
-```{r, include=T}
-p1.mut_wt.res = readRDS("../r_results/diff_expression/tables/deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
-
-r0 = spinal.cord.targets %>%
-  dplyr::select(gene_name,
-                regulation_mode) %>%
-  bind_rows(as.data.frame(p1.mut_wt.res) %>%
-              rownames_to_column(var = "gene_name") %>%
-              filter(gene_name %in% p1.degs) %>%
-              filter(gene_name != "Mmd2") %>%
-              mutate(regulation_mode = ifelse(log2FoldChange < 0, "+", "-")) %>%
-              dplyr::select(gene_name,
-                            regulation_mode)) %>%
-  dplyr::rename("regulation_mode_exp" = "regulation_mode")
-```
-
-1) Form the final set of reference genes for p1:
-
-```{r, include=T}
-p1.ref.genes = r0 %>%
-  left_join(as.data.frame(p1.res) %>%
-              rownames_to_column(var = "gene_name") %>%
-              filter(!is.na(padj)) %>%
-              filter(padj < fdr) %>%
-              mutate(regulation_mode_obs = ifelse(log2FoldChange > 0, "+", "-")) %>%
-              dplyr::select(gene_name,
-                            regulation_mode_obs),
-            by = c("gene_name" = "gene_name")) %>%
-  filter(!is.na(regulation_mode_obs)) %>%
-  filter(regulation_mode_exp == regulation_mode_obs)
-
-saveRDS(p1.ref.genes, file = "../r_results/diff_expression/tables/p1_ref_genes.rds")
-```
-
-The size of the final set of reference genes for p1:
-
-```{r, include=T}
-nrow(p1.ref.genes)
-```
-
-2) Form the final set of reference genes for p2:
-
-```{r, include=T}
-p2.ref.genes = r0 %>%
-  left_join(as.data.frame(p2.res) %>%
-              rownames_to_column(var = "gene_name") %>%
-              filter(!is.na(padj)) %>%
-              filter(padj < fdr) %>%
-              mutate(regulation_mode_obs = ifelse(log2FoldChange > 0, "+", "-")) %>%
-              dplyr::select(gene_name,
-                            regulation_mode_obs),
-            by = c("gene_name" = "gene_name")) %>%
-  filter(!is.na(regulation_mode_obs)) %>%
-  filter(regulation_mode_exp == regulation_mode_obs)
-
-saveRDS(p2.ref.genes, file = "../r_results/diff_expression/tables/p2_ref_genes.rds")
-```
-
-The size of the final set of reference genes for p1:
-
-```{r, include=T}
-nrow(p2.ref.genes)
-```
-
-Almost two times smaller than for p1, which should be explained by the fact that the vast majority of genes in r0 are DEGs from p1, MUT vs WT.
-
-3) Form the final set of reference genes for pMN:
-
-```{r, include=T}
-pM.ref.genes = r0 %>%
-  left_join(as.data.frame(pM.res) %>%
-              rownames_to_column(var = "gene_name") %>%
-              filter(!is.na(padj)) %>%
-              filter(padj < fdr) %>%
-              mutate(regulation_mode_obs = ifelse(log2FoldChange > 0, "+", "-")) %>%
-              dplyr::select(gene_name,
-                            regulation_mode_obs),
-            by = c("gene_name" = "gene_name")) %>%
-  filter(!is.na(regulation_mode_obs)) %>%
-  filter(regulation_mode_exp == regulation_mode_obs)
-
-saveRDS(pM.ref.genes, file = "../r_results/diff_expression/tables/pM_ref_genes.rds")
-```
-
-The size of the final set of reference genes for p1:
-
-```{r, include=T}
-nrow(pM.ref.genes)
-```
-
-Same here.
-
-Check the relevancy of the reference sets of genes by testing the enrichment of REACTOME pathways:
-
-```{r, include=T}
-background.genes = unique(c(p1.degs, p2.degs, pM.degs))
-
-reactome.pathways = msigdb_gsets(species = "Mus musculus", category = "C2", subcategory = "CP:REACTOME")
-
-saveRDS(reactome.pathways, file = "../r_results/reactome_pathways.rds")
-
-p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
-                   reactome.pathways,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(p1.ref.hyp)
-
-p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
-                   reactome.pathways,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(p2.ref.hyp)
-
-pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
-                   reactome.pathways,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(pM.ref.hyp)
-```
-
-No enrichment, so the reference sets of genes may not be more relevant to gliogenesis than the whole set of genes differentially expressed in p1, p2 and pMN between MUT-D11 and WT-D11:
-
-1) Check this whole set (the background from above) against a default background (presumably, "all genes"):
-
-```{r, include=T}
-bkg.hyp = hypeR(background.genes,
-                reactome.pathways,
-                test = "hypergeometric",
-                fdr = fdr)
-
-hyp_show(bkg.hyp)
-```
-
-Some signalling events are enriched. Not sure if this is relevant.
-
-2) Check each of the three DEG sets against the default background:
-
-```{r, include=T}
-p1.degs.hyp = hypeR(p1.degs,
-                    reactome.pathways,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(p1.degs.hyp)
-
-p2.degs.hyp = hypeR(p2.degs,
-                    reactome.pathways,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(p2.degs.hyp)
-
-pM.degs.hyp = hypeR(pM.degs,
-                    reactome.pathways,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(pM.degs.hyp)
-```
-
-Some signalling event is enriched in the p1 DEGs, and the other two DEG sets are not enriched in any pathways. Consequently, the whole set of DEGs in p1, p2 and pMN between MUT-D11 and WT-D11 does not seem to be relevant to development, which is strange, but could be explained by the poor NFIA and NFIB KOs.
-
-Double-check these results using the Biological Process and Molecular Function GO terms:
-
-```{r, include=T}
-go.bp.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:BP")
-
-saveRDS(go.bp.sets, file = "../r_results/go_bp_sets.rds")
-
-go.mf.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:MF")
-
-saveRDS(go.mf.sets, file = "../r_results/go_mf_sets.rds")
-
-p1.degs.hyp = hypeR(p1.degs,
-                    go.bp.sets,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(p1.degs.hyp)
-
-p2.degs.hyp = hypeR(p2.degs,
-                    go.bp.sets,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(p2.degs.hyp)
-
-pM.degs.hyp = hypeR(pM.degs,
-                    go.bp.sets,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(pM.degs.hyp)
-
-p1.degs.hyp = hypeR(p1.degs,
-                    go.mf.sets,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(p1.degs.hyp)
-
-p2.degs.hyp = hypeR(p2.degs,
-                    go.mf.sets,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(p2.degs.hyp)
-
-pM.degs.hyp = hypeR(pM.degs,
-                    go.mf.sets,
-                    test = "hypergeometric",
-                    fdr = fdr)
-
-hyp_show(pM.degs.hyp)
-```
-
-No enrichment, and the signatures do not even intersect with the GO terms. 
-
-Finally, check the same GO terms in the final reference sets. As these sets mostly consist of the DEGs that I checked above, I do not expect any enrichments, but just in case:
-
-```{r, include=T}
-p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
-                   go.bp.sets,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(p1.ref.hyp)
-
-p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
-                   go.bp.sets,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(p2.ref.hyp)
-
-pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
-                   go.bp.sets,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(pM.ref.hyp)
-
-p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
-                   go.mf.sets,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(p1.ref.hyp)
-
-p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
-                   go.mf.sets,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(p2.ref.hyp)
-
-pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
-                   go.mf.sets,
-                   test = "hypergeometric",
-                   background = background.genes,
-                   fdr = fdr)
-
-hyp_show(pM.ref.hyp)
-
-p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
-                   go.bp.sets,
-                   test = "hypergeometric",
-                   fdr = fdr)
-
-hyp_show(p1.ref.hyp)
-
-p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
-                   go.bp.sets,
-                   test = "hypergeometric",
-                   fdr = fdr)
-
-hyp_show(p2.ref.hyp)
-
-pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
-                   go.bp.sets,
-                   test = "hypergeometric",
-                   fdr = fdr)
-
-hyp_show(pM.ref.hyp)
-
-p1.ref.hyp = hypeR(p1.ref.genes$gene_name,
-                   go.mf.sets,
-                   test = "hypergeometric",
-                   fdr = fdr)
-
-hyp_show(p1.ref.hyp)
-
-p2.ref.hyp = hypeR(p2.ref.genes$gene_name,
-                   go.mf.sets,
-                   test = "hypergeometric",
-                   fdr = fdr)
-
-hyp_show(p2.ref.hyp)
-
-pM.ref.hyp = hypeR(pM.ref.genes$gene_name,
-                   go.mf.sets,
-                   test = "hypergeometric",
-                   fdr = fdr)
-
-hyp_show(pM.ref.hyp)
-```
-
-No enrichments and no intersection with the GO terms, as expected.
-
-One last control: check the same pathways and GO terms in the set of known NFIA targets which are certainly relevant to gliogenesis (although, the set may be too small for the enrichment analysis):
-
-```{r, include=T}
-spinal.cord.hyp = hypeR(spinal.cord.targets$gene_name,
-                        reactome.pathways,
-                        test = "hypergeometric",
-                        fdr = fdr)
-
-hyp_show(spinal.cord.hyp)
-
-spinal.cord.hyp = hypeR(spinal.cord.targets$gene_name,
-                        go.bp.sets,
-                        test = "hypergeometric",
-                        fdr = fdr)
-
-hyp_show(spinal.cord.hyp)
-
-spinal.cord.hyp = hypeR(spinal.cord.targets$gene_name,
-                        go.mf.sets,
-                        test = "hypergeometric",
-                        fdr = fdr)
-
-hyp_show(spinal.cord.hyp)
-```
-
-No enrichment either. Consequently, gliogenesis or even the development of the neural system may not be well represented in REACTOME pathways and GO terms, so, overall, the tests are inconclusive, and I will use the final domain-specific gene sets that I generated.
