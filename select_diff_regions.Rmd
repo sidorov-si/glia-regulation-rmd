@@ -17,44 +17,30 @@ library(tibble)
 library(Biostrings)
 ```
 
-Set FDR:
+Set significance parameters:
 
 ```{r, include=T}
-fdr.regions = 0.01
 fdr.matches = 0.05
 ```
 
-Define a general function for the region selection:
+Define a general function for generating BED files of NFIA-dependent regions:
 
 ```{r, include=T}
-select.regions.by.log2fc = function(deseq.res, count.table, regulation.mode, bed.filename) {
-  if (regulation.mode == "up") {
-    region.names = rownames(as.data.frame(deseq.res) %>% 
-                            dplyr::filter(padj < fdr.regions) %>% 
-                            dplyr::filter(log2FoldChange > 0))
-  } else if (regulation.mode == "down") {
-    region.names = rownames(as.data.frame(deseq.res) %>% 
-                            dplyr::filter(padj < fdr.regions) %>% 
-                            dplyr::filter(log2FoldChange < 0))
-  } else { # any
-    region.names = rownames(as.data.frame(deseq.res) %>% 
-                            dplyr::filter(padj < fdr.regions))
-  }
-
+select.dep.regions = function(p.11.7.dep, count.table, bed.filename) {
   bed.content = count.table %>%
     dplyr::select(Geneid,
                   Chr,
                   Start,
                   End,
                   Strand) %>%
-    dplyr::mutate(Score = 0) %>%
+    mutate(Score = 0) %>%
     dplyr::select(Chr,
                   Start,
                   End,
                   Geneid,
                   Score,
                   Strand) %>%
-    dplyr::filter(Geneid %in% region.names)
+    filter(Geneid %in% p.11.7.dep)
 
   write.table(bed.content,
               file = bed.filename,
@@ -71,74 +57,91 @@ select.regions.by.log2fc = function(deseq.res, count.table, regulation.mode, bed
 }
 ```
 
-## Select differentially accessible consensus regions
-
-Select consensus regions in p1 that are significantly upregulated, downregulated or significantly regulated in either way:
+Define a general function for scanning NFIA-dependent regions:
 
 ```{r, include=T}
-p1.res = readRDS("../r_results/diff_accessibility/p1_deseq2_results.rds")
+scan.tf.motif = function(domain.name, p.nfia.hm.pwm, p.da.seq, strand, min.score, sites.filename) {
+  p.nfia.hm.sites = searchSeq(p.nfia.hm.pwm,
+                              p.da.seq,
+                              strand = strand,
+                              min.score = min.score)
+
+  p.nfia.hm.sites.df = writeGFF3(p.nfia.hm.sites) %>%
+    dplyr::select(-source,
+                  -feature,
+                  -frame,
+                  -attributes) %>%
+    mutate(pvalue = unlist(pvalues(p.nfia.hm.sites, type = "sampling"))) %>%
+    mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+    filter(padj < fdr.matches)
+  
+  saveRDS(p.nfia.hm.sites.df, file = sites.filename)
+  
+  p.matched.regions = unique(p.nfia.hm.sites.df$seqname)
+  
+  cat("\n")
+  
+  cat(paste0(domain.name, ":\n"))
+  
+  cat(paste0("Number of all NFIA-dependent regions    : ", length(p.da.seq), "\n"))
+  
+  cat(paste0("Number of matched NFIA-dependent regions: ", length(p.matched.regions), 
+             " (", round(length(p.matched.regions) / length(p.da.seq), 2) * 100, "%)",  "\n"))
+  
+  cat(paste0("Number of NFIA motif matches            : ", nrow(p.nfia.hm.sites.df)))
+  
+  return(p.matched.regions)
+}
+```
+
+## Select NFIA-dependent regions to scan
+
+Select NFIA-dependent regions in each domain:
+
+```{r, include=T}
+p1.11.7.dep = readRDS("../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep.rds")
+
+p2.11.7.dep = readRDS("../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep.rds")
+
+pM.11.7.dep = readRDS("../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep.rds")
 
 p1 = read.delim("../results/select_samples/featureCounts_WT_D7_p1_vs_WT_D11_p1.tsv") %>%
   dplyr::select(-X)
 
 names(p1) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p1))
 
-p1.up.ranges = select.regions.by.log2fc(p1.res, p1, "up", "../r_results/select_diff_regions/p1_upregulated_regions_D11_vs_D7.bed")
-
-p1.down.ranges = select.regions.by.log2fc(p1.res, p1, "down", "../r_results/select_diff_regions/p1_downregulated_regions_D11_vs_D7.bed")
-
-p1.both.ranges = select.regions.by.log2fc(p1.res, p1, "both", "../r_results/select_diff_regions/p1_regulated_regions_D11_vs_D7.bed")
-```
-
-Select consensus regions in p2 that are significantly upregulated, downregulated or significantly regulated in either way:
-
-```{r, include=T}
-p2.res = readRDS("../r_results/diff_accessibility/p2_deseq2_results.rds")
-
 p2 = read.delim("../results/select_samples/featureCounts_WT_D7_p2_vs_WT_D11_p2.tsv") %>%
   dplyr::select(-X)
 
 names(p2) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p2))
-
-p2.up.ranges = select.regions.by.log2fc(p2.res, p2, "up", "../r_results/select_diff_regions/p2_upregulated_regions_D11_vs_D7.bed")
-
-p2.down.ranges = select.regions.by.log2fc(p2.res, p2, "down", "../r_results/select_diff_regions/p2_downregulated_regions_D11_vs_D7.bed")
-
-p2.both.ranges = select.regions.by.log2fc(p2.res, p2, "both", "../r_results/select_diff_regions/p2_regulated_regions_D11_vs_D7.bed")
-```
-
-Select consensus regions in pMN that are significantly upregulated, downregulated or significantly regulated in either way:
-
-```{r, include=T}
-pM.res = readRDS("../r_results/diff_accessibility/pMN_deseq2_results.rds")
 
 pM = read.delim("../results/select_samples/featureCounts_WT_D7_pM_vs_WT_D11_pM.tsv") %>%
   dplyr::select(-X)
 
 names(pM) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(pM))
 
-pM.up.ranges = select.regions.by.log2fc(pM.res, pM, "up", "../r_results/select_diff_regions/pM_upregulated_regions_D11_vs_D7.bed")
+p1.dep.ranges = select.dep.regions(p1.11.7.dep, p1, "../r_results/select_diff_regions/p1_D11_vs_D7_dep.bed")
 
-pM.down.ranges = select.regions.by.log2fc(pM.res, pM, "down", "../r_results/select_diff_regions/pM_downregulated_regions_D11_vs_D7.bed")
+p2.dep.ranges = select.dep.regions(p2.11.7.dep, p2, "../r_results/select_diff_regions/p2_D11_vs_D7_dep.bed")
 
-pM.both.ranges = select.regions.by.log2fc(pM.res, pM, "both", "../r_results/select_diff_regions/pM_regulated_regions_D11_vs_D7.bed")
+pM.dep.ranges = select.dep.regions(pM.11.7.dep, pM, "../r_results/select_diff_regions/pM_D11_vs_D7_dep.bed")
 ```
 
-## Scan significantly regulated regions for NFIA motifs
+## Scan NFIA-dependent regions for the NFIA motif
 
-Obtain the sequences of significantly regulated regions in p1, p2 and pMN:
+Obtain the sequences of NFIA-dependent regions per domain:
 
 ```{r, include=T}
 mm10.genome = BSgenome.Mmusculus.UCSC.mm10
 
-p1.da.seq = getSeq(mm10.genome, p1.both.ranges)
+p1.da.seq = getSeq(mm10.genome, p1.dep.ranges)
 
-p2.da.seq = getSeq(mm10.genome, p2.both.ranges)
+p2.da.seq = getSeq(mm10.genome, p2.dep.ranges)
 
-pM.da.seq = getSeq(mm10.genome, pM.both.ranges)
+pM.da.seq = getSeq(mm10.genome, pM.dep.ranges)
 ```
 
-Prepare background nucleotide frequencies in significantly regulated regions from p1, p2 and pMN:
+Prepare background nucleotide frequencies in NFIA-dependent regions in each domain:
 
 ```{r, include=T}
 p1.nc.freq = letterFrequency(p1.da.seq, letters = c("A", "C", "G", "T"))
@@ -181,107 +184,32 @@ pM.nfia.hm.pwm = PWMatrix(ID = "NFIA",
                           bg = pM.background)
 ```
 
-Scan significantly regulated regions (both up- and downregulated) in p1, p2 and pMN for the NFIA binding motif from HOCOMOCO:
+Scan NFIA-dependent regions in each domain for the NFIA binding motif from HOCOMOCO. Scan only one strand, as the NFIA motif from HOCOMOCO is palindromic, and we do not expect a strand bias in its matches. Indeed, for p1, I scanned both the "+" and the "-" strand, and the numbers of matched NFIA-dependent regions were almost identical.
 
 ```{r, include=T}
-# Scan only one strand, as the NFIA motif in HOCOMOCO is palindromic,
-# and we do not expect a strand bias in its matches
-# (indeed, for p1, I scanned both the "+" and the "-" strand, and the numbers of 
-# matched regulated, upregulated and downregulated regions were almost identical)
-p1.nfia.hm.sites = searchSeq(p1.nfia.hm.pwm,
-                             p1.da.seq,
-                             strand = "+",
-                             min.score = "80%")
+p1.matched.regions = scan.tf.motif(domain.name = "p1", 
+                                   p.nfia.hm.pwm = p1.nfia.hm.pwm, 
+                                   p.da.seq = p1.da.seq, 
+                                   strand = "+", 
+                                   min.score = "80%", 
+                                   sites.filename = "../r_results/select_diff_regions/p1_nfia_hm_sites_df.rds")
 
-p1.nfia.hm.sites.df = writeGFF3(p1.nfia.hm.sites) %>%
-  dplyr::select(-source,
-                -feature,
-                -frame,
-                -attributes) %>%
-  mutate(pvalue = unlist(pvalues(p1.nfia.hm.sites, type = "sampling"))) %>%
-  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
-  filter(padj < fdr.matches)
+p2.matched.regions = scan.tf.motif(domain.name = "p2", 
+                                   p.nfia.hm.pwm = p2.nfia.hm.pwm, 
+                                   p.da.seq = p2.da.seq, 
+                                   strand = "+", 
+                                   min.score = "80%", 
+                                   sites.filename = "../r_results/select_diff_regions/p2_nfia_hm_sites_df.rds")
 
-saveRDS(p1.nfia.hm.sites.df, file = "../r_results/select_diff_regions/p1_nfia_hm_sites_df.rds")
-
-p1.matched.regions = unique(p1.nfia.hm.sites.df$seqname)
-
-cat("p1:\n")
-
-cat("Number of matched significantly regulated regions      :", length(unique(p1.nfia.hm.sites.df$seqname)), "\n")
-
-cat("Number of matched significantly upregulated regions    :", 
-    sum(p1.matched.regions %in% p1.up.ranges@ranges@NAMES), 
-    "(",  round(sum(p1.matched.regions %in% p1.up.ranges@ranges@NAMES) / length(unique(p1.nfia.hm.sites.df$seqname)) * 100, 2), ")%", "\n")
-
-cat("Number of matched significantly downregulated regions  :", 
-    sum(p1.matched.regions %in% p1.down.ranges@ranges@NAMES), 
-    "(",  round(sum(p1.matched.regions %in% p1.down.ranges@ranges@NAMES) / length(unique(p1.nfia.hm.sites.df$seqname)) * 100, 2), ")%", "\n")
-
-# p2
-p2.nfia.hm.sites = searchSeq(p2.nfia.hm.pwm,
-                             p2.da.seq,
-                             strand = "+",
-                             min.score = "80%")
-
-p2.nfia.hm.sites.df = writeGFF3(p2.nfia.hm.sites) %>%
-  dplyr::select(-source,
-                -feature,
-                -frame,
-                -attributes) %>%
-  mutate(pvalue = unlist(pvalues(p2.nfia.hm.sites, type = "sampling"))) %>%
-  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
-  filter(padj < fdr.matches)
-
-saveRDS(p2.nfia.hm.sites.df, file = "../r_results/select_diff_regions/p2_nfia_hm_sites_df.rds")
-
-p2.matched.regions = unique(p2.nfia.hm.sites.df$seqname)
-
-cat("p2:\n")
-
-cat("Number of matched significantly regulated regions      :", length(unique(p2.nfia.hm.sites.df$seqname)), "\n")
-
-cat("Number of matched significantly upregulated regions    :", 
-    sum(p2.matched.regions %in% p2.up.ranges@ranges@NAMES), 
-    "(",  round(sum(p2.matched.regions %in% p2.up.ranges@ranges@NAMES) / length(unique(p2.nfia.hm.sites.df$seqname)) * 100, 2), ")%", "\n")
-
-cat("Number of matched significantly downregulated regions  :", 
-    sum(p2.matched.regions %in% p2.down.ranges@ranges@NAMES), 
-    "(",  round(sum(p2.matched.regions %in% p2.down.ranges@ranges@NAMES) / length(unique(p2.nfia.hm.sites.df$seqname)) * 100, 2), ")%", "\n")
-
-# pMN
-pM.nfia.hm.sites = searchSeq(pM.nfia.hm.pwm,
-                             pM.da.seq,
-                             strand = "+",
-                             min.score = "80%")
-
-pM.nfia.hm.sites.df = writeGFF3(pM.nfia.hm.sites) %>%
-  dplyr::select(-source,
-                -feature,
-                -frame,
-                -attributes) %>%
-  mutate(pvalue = unlist(pvalues(pM.nfia.hm.sites, type = "sampling"))) %>%
-  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
-  filter(padj < fdr.matches)
-
-pM.matched.regions = unique(pM.nfia.hm.sites.df$seqname)
-
-saveRDS(pM.nfia.hm.sites.df, file = "../r_results/select_diff_regions/pM_nfia_hm_sites_df.rds")
-
-cat("pMN:\n")
-
-cat("Number of matched significantly regulated regions      :", length(unique(pM.nfia.hm.sites.df$seqname)), "\n")
-
-cat("Number of matched significantly upregulated regions    :", 
-    sum(pM.matched.regions %in% pM.up.ranges@ranges@NAMES), 
-    "(",  round(sum(pM.matched.regions %in% pM.up.ranges@ranges@NAMES) / length(unique(pM.nfia.hm.sites.df$seqname)) * 100, 2), ")%", "\n")
-
-cat("Number of matched significantly downregulated regions  :", 
-    sum(pM.matched.regions %in% pM.down.ranges@ranges@NAMES), 
-    "(",  round(sum(pM.matched.regions %in% pM.down.ranges@ranges@NAMES) / length(unique(pM.nfia.hm.sites.df$seqname)) * 100, 2), ")%", "\n")
+pM.matched.regions = scan.tf.motif(domain.name = "pM", 
+                                   p.nfia.hm.pwm = pM.nfia.hm.pwm, 
+                                   p.da.seq = pM.da.seq, 
+                                   strand = "+", 
+                                   min.score = "80%", 
+                                   sites.filename = "../r_results/select_diff_regions/pM_nfia_hm_sites_df.rds")
 ```
 
-Select significantly upregulated regions with NFIA matches:
+Select NFIA-dependent regions with NFIA matches:
 
 ```{r, include=T}
 p1.up.nfia.names = p1.matched.regions[p1.matched.regions %in% p1.up.ranges@ranges@NAMES]

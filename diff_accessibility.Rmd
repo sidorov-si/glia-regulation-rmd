@@ -231,9 +231,19 @@ p2.11.7.dep = intersect(p2.11.7.res.up, p2.mut.wt.res.down)
 pM.11.7.dep = intersect(pM.11.7.res.up, pM.mut.wt.res.down)
 
 # Save these sets of genes
-saveRDS(p1.11.7.dep, file = "../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep.tsv")
+saveRDS(p1.11.7.dep, file = "../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep.rds")
 
-saveRDS(p2.11.7.dep, file = "../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep.tsv")
+saveRDS(p2.11.7.dep, file = "../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep.rds")
 
-saveRDS(pM.11.7.dep, file = "../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep.tsv")
+saveRDS(pM.11.7.dep, file = "../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep.rds")
+```
+
+Print out the numbers of NFIA-dependet regions per domain:
+
+```{r, include=T}
+cat("Number of NFIA-dependent regions in p1:", length(p1.11.7.dep), "\n")
+
+cat("Number of NFIA-dependent regions in p2:", length(p2.11.7.dep), "\n")
+
+cat("Number of NFIA-dependent regions in pM:", length(pM.11.7.dep), "\n")
 ```
