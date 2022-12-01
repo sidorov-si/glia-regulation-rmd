@@ -21,6 +21,11 @@ Set significance parameters:
 
 ```{r, include=T}
 fdr.matches = 0.05
+
+# Joaquina's parameters for choosing significantly regulated regions
+fdr = 0.01
+min.l2fc = 2 # Min log2(fold change)
+min.baseMean = 100
 ```
 
 Define a general function for generating BED files of NFIA-dependent regions:
@@ -99,11 +104,14 @@ scan.tf.motif = function(domain.name, p.nfia.hm.pwm, p.da.seq, strand, min.score
 Select NFIA-dependent regions in each domain:
 
 ```{r, include=T}
-p1.11.7.dep = readRDS("../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep.rds")
+p1.11.7.dep = readRDS(paste0("../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep", 
+                             "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
-p2.11.7.dep = readRDS("../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep.rds")
+p2.11.7.dep = readRDS(paste0("../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep", 
+                             "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
-pM.11.7.dep = readRDS("../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep.rds")
+pM.11.7.dep = readRDS(paste0("../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep", 
+                             "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
 p1 = read.delim("../results/select_samples/featureCounts_WT_D7_p1_vs_WT_D11_p1.tsv") %>%
   dplyr::select(-X)
@@ -120,11 +128,17 @@ pM = read.delim("../results/select_samples/featureCounts_WT_D7_pM_vs_WT_D11_pM.t
 
 names(pM) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(pM))
 
-p1.dep.ranges = select.dep.regions(p1.11.7.dep, p1, "../r_results/select_diff_regions/p1_D11_vs_D7_dep.bed")
+p1.dep.ranges = select.dep.regions(p1.11.7.dep, p1, 
+                                   paste0("../r_results/select_diff_regions/p1_D11_vs_D7_dep", 
+                                          "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,".bed"))
 
-p2.dep.ranges = select.dep.regions(p2.11.7.dep, p2, "../r_results/select_diff_regions/p2_D11_vs_D7_dep.bed")
+p2.dep.ranges = select.dep.regions(p2.11.7.dep, p2, 
+                                   paste0("../r_results/select_diff_regions/p2_D11_vs_D7_dep", 
+                                          "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,".bed"))
 
-pM.dep.ranges = select.dep.regions(pM.11.7.dep, pM, "../r_results/select_diff_regions/pM_D11_vs_D7_dep.bed")
+pM.dep.ranges = select.dep.regions(pM.11.7.dep, pM, 
+                                   paste0("../r_results/select_diff_regions/pM_D11_vs_D7_dep", 
+                                          "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,".bed"))
 ```
 
 ## Scan NFIA-dependent regions for the NFIA motif
@@ -192,21 +206,27 @@ p1.matched.regions = scan.tf.motif(domain.name = "p1",
                                    p.da.seq = p1.da.seq, 
                                    strand = "+", 
                                    min.score = "80%", 
-                                   sites.filename = "../r_results/select_diff_regions/p1_nfia_hm_sites_df.rds")
+                                   sites.filename = paste0("../r_results/select_diff_regions/", 
+                                                           "p1_nfia_hm_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                                           "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
 p2.matched.regions = scan.tf.motif(domain.name = "p2", 
                                    p.nfia.hm.pwm = p2.nfia.hm.pwm, 
                                    p.da.seq = p2.da.seq, 
                                    strand = "+", 
                                    min.score = "80%", 
-                                   sites.filename = "../r_results/select_diff_regions/p2_nfia_hm_sites_df.rds")
+                                   sites.filename = paste0("../r_results/select_diff_regions/", 
+                                                           "p2_nfia_hm_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                                           "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
 pM.matched.regions = scan.tf.motif(domain.name = "pM", 
                                    p.nfia.hm.pwm = pM.nfia.hm.pwm, 
                                    p.da.seq = pM.da.seq, 
                                    strand = "+", 
                                    min.score = "80%", 
-                                   sites.filename = "../r_results/select_diff_regions/pM_nfia_hm_sites_df.rds")
+                                   sites.filename = paste0("../r_results/select_diff_regions/", 
+                                                           "pM_nfia_hm_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                                           "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 ```
 
 Select NFIA-dependent regions with NFIA matches:
@@ -214,13 +234,20 @@ Select NFIA-dependent regions with NFIA matches:
 ```{r, include=T}
 p1.dep.nfia.ranges = p1.dep.ranges[p1.dep.ranges@ranges@NAMES %in% p1.matched.regions]
 
-saveRDS(p1.dep.nfia.ranges, file = "../r_results/select_diff_regions/p1_dep_nfia_ranges.rds")
+saveRDS(p1.dep.nfia.ranges, 
+        file = paste0("../r_results/select_diff_regions/", 
+                      "p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                      "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
 p2.dep.nfia.ranges = p2.dep.ranges[p2.dep.ranges@ranges@NAMES %in% p2.matched.regions]
 
-saveRDS(p2.dep.nfia.ranges, file = "../r_results/select_diff_regions/p2_dep_nfia_ranges.rds")
+saveRDS(p2.dep.nfia.ranges, file = paste0("../r_results/select_diff_regions/", 
+                      "p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                      "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
 pM.dep.nfia.ranges = pM.dep.ranges[pM.dep.ranges@ranges@NAMES %in% pM.matched.regions]
 
-saveRDS(pM.dep.nfia.ranges, file = "../r_results/select_diff_regions/pM_dep_nfia_ranges.rds")
+saveRDS(pM.dep.nfia.ranges, file = paste0("../r_results/select_diff_regions/", 
+                      "pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                      "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 ```

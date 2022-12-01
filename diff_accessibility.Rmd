@@ -20,7 +20,7 @@ library(Biostrings)
 Set significance parameters:
 
 ```{r, include=T}
-# Joaquina
+# Joaquina's parameters
 fdr = 0.01
 min.l2fc = 2 # Min log2(fold change)
 min.baseMean = 100
@@ -231,14 +231,17 @@ p2.11.7.dep = intersect(p2.11.7.res.up, p2.mut.wt.res.down)
 pM.11.7.dep = intersect(pM.11.7.res.up, pM.mut.wt.res.down)
 
 # Save these sets of genes
-saveRDS(p1.11.7.dep, file = "../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep.rds")
+saveRDS(p1.11.7.dep, file = paste0("../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep", 
+                                   "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
-saveRDS(p2.11.7.dep, file = "../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep.rds")
+saveRDS(p2.11.7.dep, file = paste0("../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep", 
+                                   "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 
-saveRDS(pM.11.7.dep, file = "../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep.rds")
+saveRDS(pM.11.7.dep, file = paste0("../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep", 
+                                   "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 ```
 
-Print out the numbers of NFIA-dependet regions per domain:
+Print out the numbers of NFIA-dependent regions per domain:
 
 ```{r, include=T}
 cat("Number of NFIA-dependent regions in p1:", length(p1.11.7.dep), "\n")
