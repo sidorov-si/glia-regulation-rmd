@@ -24,6 +24,10 @@ Set significance parameters:
 fdr = 0.01
 min.l2fc = 2 # Min log2(fold change)
 min.baseMean = 100
+
+# fdr = 0.05
+# min.l2fc = 0 # Min log2(fold change)
+# min.baseMean = 0
 ```
 
 Prepare the general function for the analysis of differential accessibility:

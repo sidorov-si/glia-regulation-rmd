@@ -13,17 +13,149 @@ dyn.load("/home/rstudio/libs/libgslcblas.so.0")
 library(tibble)
 library(Biostrings)
 library(rtracklayer)
+library(hypeR)
 ```
 
-Set FDR:
+Set constant FDRs:
 
 ```{r, include=T}
-fdr = 0.05
+fdr.degs = 0.05
+fdr.matches = 0.05
+```
 
-# Joaquina's parameters for choosing significantly regulated regions
-fdr = 0.01
-min.l2fc = 2 # Min log2(fold change)
-min.baseMean = 100
+Prepare a general function to generate predictions:
+
+```{r, include=T}
+predict_targets = function(cutoff.list, domain.name) {
+  fdr.regions = unlist(cutoff.list)["fdr.regions"]
+  
+  min.l2fc = unlist(cutoff.list)["min.l2fc"]
+  
+  min.baseMean = unlist(cutoff.list)["min.baseMean"]
+  
+  p.dep.nfia.ranges = readRDS(paste0("../r_results/select_diff_regions/", 
+                                     domain.name, "_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                     "_in-regions-of_fdr", fdr.regions, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+  
+  if (domain.name == "p1") {
+    p.deg.annot.ranges = p1.deg.annot.ranges
+  } else if (domain.name == "p2") {
+    p.deg.annot.ranges = p2.deg.annot.ranges
+  } else if (domain.name == "pM") {
+    p.deg.annot.ranges = pM.deg.annot.ranges
+  } else {
+    cat("Unknown domain!")
+    p.deg.annot.ranges = NULL
+  }
+  
+  p.deg.tss.ranges = GRanges(seqnames = seqnames(p.deg.annot.ranges),
+                             ranges = IRanges(start = start(ranges(p.deg.annot.ranges)),
+                                              end = start(ranges(p.deg.annot.ranges)) + 1,
+                                              names = names(ranges(p.deg.annot.ranges))),
+                             strand = strand(p.deg.annot.ranges),
+                             gene_name = p.deg.annot.ranges$gene_name)
+  
+  p.nfia.targets.nums = GenomicRanges::nearest(p.dep.nfia.ranges, p.deg.tss.ranges)
+
+  p.nfia.targets = p.deg.tss.ranges[p.nfia.targets.nums]$gene_name
+  
+  p.nfia.targets.dist = GenomicRanges::distanceToNearest(p.dep.nfia.ranges, p.deg.tss.ranges)
+  
+  relative.location.df = data.frame(region_start = start(ranges(p.dep.nfia.ranges)),
+                                    region_end = end(ranges(p.dep.nfia.ranges)),
+                                    tss_coord = start(ranges(p.deg.tss.ranges[p.nfia.targets.nums]))) %>%
+    mutate(region_to_target = ifelse(tss_coord > region_end, "upstream",
+                                     ifelse(tss_coord < region_start, "downstream", "overlap")))
+  
+  return(data.frame(regions = names(p.dep.nfia.ranges),
+                    targets = p.nfia.targets,
+                    dist_to_target = p.nfia.targets.dist,
+                    region_to_target = relative.location.df$region_to_target))
+}
+```
+
+Prepare a general function to summarise predictions:
+
+```{r, include=T}
+summarise_predictions = function(predictions.df, domain.name) {
+  if (domain.name == "p1") {
+    p.deg.annot.ranges = p1.deg.annot.ranges
+    p.ref.genes = p1.ref.genes
+  } else if (domain.name == "p2") {
+    p.deg.annot.ranges = p2.deg.annot.ranges
+    p.ref.genes = p2.ref.genes
+  } else if (domain.name == "pM") {
+    p.deg.annot.ranges = pM.deg.annot.ranges
+    p.ref.genes = pM.ref.genes
+  } else {
+    cat("Unknown domain!")
+    p.deg.annot.ranges = NULL
+    p.ref.genes = NULL
+  }
+  
+  degs = unique(p.deg.annot.ranges$gene_name)
+  
+  pred = unique(predictions.df$targets)
+  
+  n.degs = length(degs)
+  
+  n.pred = length(pred)
+  
+  n.refs = length(p.ref.genes)
+  
+  n.prrf = length(p.ref.genes[p.ref.genes %in% pred])
+  
+  cat("Predicted targets / All DEGs (expected proportion of predicted ref. genes):", 
+      n.pred, "/", n.degs, "(", round(n.pred / n.degs * 100, 2), "% )\n")
+  
+  cat("Predicted reference genes / All predicted targets (observed proportion of predicted ref. genes):", 
+      n.prrf, "/", n.refs, "(", round(n.prrf / n.refs * 100, 2), "% )\n")
+  
+  cat("Enrichment of reference genes among predicted ones (observed / expected):",
+      round((n.prrf / n.refs) / (n.pred / n.degs), 2), "\n")
+  
+  hyp.obj = hypeR(signature = p.ref.genes,
+                  genesets = list("ALL_PREDICTED" = pred,
+                                  "NON_PREDICTED" = degs[!degs %in% pred]), 
+                  test = "hypergeometric", 
+                  background = unique(p.deg.annot.ranges$gene_name), # all DEGs
+                  fdr = 0.05)
+  
+  n.regions = nrow(predictions.df)
+  
+  n.proximal.regions = nrow(predictions.df %>%
+                              filter(region_to_target %in% c("upstream", "overlap")) %>%
+                              filter(dist_to_target.distance <= 2000))
+  
+  n.proximal.to.ref.regions = nrow(predictions.df %>%
+                                     filter(region_to_target %in% c("upstream", "overlap")) %>%
+                                     filter(dist_to_target.distance <= 2000) %>%
+                                     filter(targets %in% p.ref.genes))
+  
+  cat("Total number of regions:", n.regions, "\n")
+  
+  cat("Number of regions proximal to their predicted targets:", n.proximal.regions, "(", round(n.proximal.regions / n.regions * 100, 2), "% )", "\n")
+  
+  cat("Number of regions proximal to their predicted reference targets:", n.proximal.to.ref.regions, "\n")
+  
+  return(hyp.obj)
+  
+  # return(list("enr" = round(log2((n.prrf / n.refs) / (n.pred / n.degs)), 2),
+  #             "prx" = round(n.proximal.regions / n.regions, 2),
+  #             "hyp" = hyp.obj))
+  
+  # dist.plot = data.frame(category = rep("elements", 2),
+  #            dist_group = c("proximal", "distal"),
+  #            freq = c(n.proximal.regions / n.regions,
+  #                     1 - n.proximal.regions / n.regions)) %>%
+  #   mutate(dist_group = factor(dist_group, levels = c("proximal", "distal"))) %>%
+  #   ggplot(aes(x = category,
+  #              y = freq)) +
+  #     geom_col(aes(fill = dist_group)) +
+  #     theme_classic()
+  # 
+  # ggsave(dist.plot.filename, dist.plot)
+}
 ```
 
 ## Form and check mm10 gene annotation
@@ -76,90 +208,140 @@ Find the genomic coordinates of genes differentially expressed between WT-D11 an
 p1.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds"))
 
 p1.res.sign.gene_names = p1.res %>%
+  filter(padj < fdr.degs) %>%
   rownames_to_column(var = "gene_name") %>%
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
   pull(gene_name)
 
-p1.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p1.res.sign.gene_names]
+p1.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p1.res.sign.gene_names, ]
+
+p1.deg.annot.ranges = GRanges(seqnames = p1.deg.annot$chr,
+                              ranges = IRanges(start = p1.deg.annot$start,
+                                               end   = p1.deg.annot$stop,
+                                               names = p1.deg.annot$tx_name),
+                              strand = strand(p1.deg.annot$strand),
+                              gene_name = p1.deg.annot$gene_name)
 
 p2.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds"))
 
 p2.res.sign.gene_names = p2.res %>%
+  filter(padj < fdr.degs) %>%
   rownames_to_column(var = "gene_name") %>%
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
   pull(gene_name)
 
-p2.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p2.res.sign.gene_names]
+p2.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p2.res.sign.gene_names, ]
+
+p2.deg.annot.ranges = GRanges(seqnames = p2.deg.annot$chr,
+                              ranges = IRanges(start = p2.deg.annot$start,
+                                               end   = p2.deg.annot$stop,
+                                               names = p2.deg.annot$tx_name),
+                              strand = strand(p2.deg.annot$strand),
+                              gene_name = p2.deg.annot$gene_name)
 
 pM.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds"))
 
 pM.res.sign.gene_names = pM.res %>%
+  filter(padj < fdr.degs) %>%
   rownames_to_column(var = "gene_name") %>%
-  filter(!is.na(padj)) %>%
-  filter(padj < fdr) %>%
   pull(gene_name)
 
-pM.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% pM.res.sign.gene_names]
+pM.deg.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% pM.res.sign.gene_names, ]
+
+pM.deg.annot.ranges = GRanges(seqnames = pM.deg.annot$chr,
+                              ranges = IRanges(start = pM.deg.annot$start,
+                                               end   = pM.deg.annot$stop,
+                                               names = pM.deg.annot$tx_name),
+                              strand = strand(pM.deg.annot$strand),
+                              gene_name = pM.deg.annot$gene_name)
 ```
 
 ## Predict NFIA targets in p1, p2 and pMN as closest DEGs
 
-Upload upregulated regions with at least one NFIA motif match:
+Predict NFIA targets, per domain, with different cutoffs for the region significance:
 
 ```{r, include=T}
-p1.up.nfia.ranges = readRDS("../r_results/select_diff_regions/p1_up_nfia_ranges.rds")
+region.sign.cutoffs.1 = list(fdr.regions = 0.01, min.l2fc = 2, min.baseMean = 100)
 
-p2.up.nfia.ranges = readRDS("../r_results/select_diff_regions/p2_up_nfia_ranges.rds")
+region.sign.cutoffs.2 = list(fdr.regions = 0.01, min.l2fc = 2, min.baseMean = 0)
 
-pM.up.nfia.ranges = readRDS("../r_results/select_diff_regions/pM_up_nfia_ranges.rds")
+region.sign.cutoffs.3 = list(fdr.regions = 0.01, min.l2fc = 0, min.baseMean = 0)
+
+region.sign.cutoffs.4 = list(fdr.regions = 0.05, min.l2fc = 0, min.baseMean = 0)
+
+# p1
+
+p1.1.df = predict_targets(list(region.sign.cutoffs.1), domain.name = "p1")
+
+p1.2.df = predict_targets(list(region.sign.cutoffs.2), domain.name = "p1")
+
+p1.3.df = predict_targets(list(region.sign.cutoffs.3), domain.name = "p1")
+
+p1.4.df = predict_targets(list(region.sign.cutoffs.4), domain.name = "p1")
+
+p1.1.df.hyp = summarise_predictions(p1.1.df, domain.name = "p1")
+
+p1.2.df.hyp = summarise_predictions(p1.2.df, domain.name = "p1")
+
+p1.3.df.hyp = summarise_predictions(p1.3.df, domain.name = "p1")
+
+p1.4.df.hyp = summarise_predictions(p1.4.df, domain.name = "p1")
+
+hyp_show(p1.1.df.hyp)
+
+hyp_show(p1.2.df.hyp)
+
+hyp_show(p1.3.df.hyp)
+
+hyp_show(p1.4.df.hyp)
+
+# p2
+
+p2.1.df = predict_targets(list(region.sign.cutoffs.1), domain.name = "p2")
+
+p2.2.df = predict_targets(list(region.sign.cutoffs.2), domain.name = "p2")
+
+p2.3.df = predict_targets(list(region.sign.cutoffs.3), domain.name = "p2")
+
+p2.4.df = predict_targets(list(region.sign.cutoffs.4), domain.name = "p2")
+
+p2.1.df.hyp = summarise_predictions(p2.1.df, domain.name = "p2")
+
+p2.2.df.hyp = summarise_predictions(p2.2.df, domain.name = "p2")
+
+p2.3.df.hyp = summarise_predictions(p2.3.df, domain.name = "p2")
+
+p2.4.df.hyp = summarise_predictions(p2.4.df, domain.name = "p2")
+
+hyp_show(p2.1.df.hyp)
+
+hyp_show(p2.2.df.hyp)
+
+hyp_show(p2.3.df.hyp)
+
+hyp_show(p2.4.df.hyp)
+
+# pMN
+
+pM.1.df = predict_targets(list(region.sign.cutoffs.1), domain.name = "pM")
+
+pM.2.df = predict_targets(list(region.sign.cutoffs.2), domain.name = "pM")
+
+pM.3.df = predict_targets(list(region.sign.cutoffs.3), domain.name = "pM")
+
+pM.4.df = predict_targets(list(region.sign.cutoffs.4), domain.name = "pM")
+
+pM.1.df.hyp = summarise_predictions(pM.1.df, domain.name = "pM")
+
+pM.2.df.hyp = summarise_predictions(pM.2.df, domain.name = "pM")
+
+pM.3.df.hyp = summarise_predictions(pM.3.df, domain.name = "pM")
+
+pM.4.df.hyp = summarise_predictions(pM.4.df, domain.name = "pM")
+
+hyp_show(pM.1.df.hyp)
+
+hyp_show(pM.2.df.hyp)
+
+hyp_show(pM.3.df.hyp)
+
+hyp_show(pM.4.df.hyp)
 ```
-
-For each upregulated region that contains at least one NFIA motif match, find the closest differentially expressed gene:
-
-```{r, include=T}
-p1.nfia.targets.nums = GenomicRanges::nearest(p1.up.nfia.ranges, p1.deg.annot)
-
-p1.nfia.targets = unique(p1.deg.annot[p1.nfia.targets.nums]$gene_name)
-
-p2.nfia.targets.nums = GenomicRanges::nearest(p2.up.nfia.ranges, p2.deg.annot)
-
-p2.nfia.targets = unique(p2.deg.annot[p2.nfia.targets.nums]$gene_name)
-
-pM.nfia.targets.nums = GenomicRanges::nearest(pM.up.nfia.ranges, pM.deg.annot)
-
-pM.nfia.targets = unique(pM.deg.annot[pM.nfia.targets.nums]$gene_name)
-```
-
-Check if the sets of predicted targets intersect with the corresponding domain-specific reference sets:
-
-```{r, include=T}
-p1.ref.genes.names = readRDS("../r_results/diff_expression/tables/p1_ref_genes.rds")$gene_name
-
-p2.ref.genes.names = readRDS("../r_results/diff_expression/tables/p2_ref_genes.rds")$gene_name
-
-pM.ref.genes.names = readRDS("../r_results/diff_expression/tables/pM_ref_genes.rds")$gene_name
-
-cat("The number of predicted reference genes:", length(p1.ref.genes.names[p1.ref.genes.names %in% p1.nfia.targets]), "(", round(length(p1.ref.genes.names[p1.ref.genes.names %in% p1.nfia.targets]) / length(p1.ref.genes.names) * 100, 2), "%)\n")
-
-cat("The number of predicted reference genes:", length(p2.ref.genes.names[p2.ref.genes.names %in% p2.nfia.targets]), "(", round(length(p2.ref.genes.names[p2.ref.genes.names %in% p2.nfia.targets]) / length(p2.ref.genes.names) * 100, 2), "%)\n")
-
-cat("The number of predicted reference genes:", length(pM.ref.genes.names[pM.ref.genes.names %in% pM.nfia.targets]), "(", round(length(pM.ref.genes.names[pM.ref.genes.names %in% pM.nfia.targets]) / length(pM.ref.genes.names) * 100, 2), "%)\n")
-```
-
-These percentages suggest random choice of predicted genes from the whole set of differentially expressed genes in each domain. Indeed, in each domain, predicted genes comprise about a half of all differentially expressed genes, and if the predicted genes were chosen at random, then about a half of the set of reference genes would be chosen, which is exactly what we observed above (the percentage of predicted genes among the reference ones varied from 48 to 53).
-
-Check if the 3 main markers of gliogenesis in our system (Apcdd1, Mmd2 and Zcchc24), which are likely to be direct targets, are among the predicted reference genes:
-
-```{r, include=T}
-marker.genes = c("Apcdd1", "Mmd2", "Zcchc24", "Slc1a3")
-
-p1.nfia.targets[p1.nfia.targets %in% marker.genes]
-
-p2.nfia.targets[p2.nfia.targets %in% marker.genes]
-
-pM.nfia.targets[pM.nfia.targets %in% marker.genes]
-```
-
-According to the sets of significantly differentially expressed genes, we expect only Mmd2 to be predicted in p1, Apcdd1 and Mmd2 to be predicted in p2, and all the three targets to be predicted in pMN. However, Mmd2 is not predicted in p1, and only Apcdd1 is predicted in p2 and pMN. Consequently, taking the closest gene is still a too rough way of target prediction, even taking into account the differential gene expression.

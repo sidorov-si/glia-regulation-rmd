@@ -26,6 +26,10 @@ fdr.matches = 0.05
 fdr = 0.01
 min.l2fc = 2 # Min log2(fold change)
 min.baseMean = 100
+
+# fdr = 0.05
+# min.l2fc = 0 # Min log2(fold change)
+# min.baseMean = 0
 ```
 
 Define a general function for generating BED files of NFIA-dependent regions:
