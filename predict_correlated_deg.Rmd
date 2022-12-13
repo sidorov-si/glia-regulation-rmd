@@ -59,12 +59,25 @@ p1.norm.counts = normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)
 
 # p2
 
+p2.raw.counts = master.table %>%
+  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p2.*"))))
 
+p2.cond = data.frame(condition = stringr::str_extract(names(p2.raw.counts), "D(7|9|11)"))
+
+p2.diff.levels = c("D7", "D9", "D11")
+
+p2.norm.counts = normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)
 
 # pMN
 
+pM.raw.counts = master.table %>%
+  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_pM.*"))))
 
+pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7|9|11)"))
 
+pM.diff.levels = c("D7", "D9", "D11")
+
+pM.norm.counts = normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)
 ```
 
 
