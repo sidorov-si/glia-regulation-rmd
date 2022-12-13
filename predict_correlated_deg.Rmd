@@ -25,6 +25,8 @@ normalize_counts = function(raw.counts, cond.table, diff.levels) {
   
   cond.table$condition = factor(cond.table$condition, levels = diff.levels)
   
+  print(cond.table)
+  
   dds = DESeqDataSetFromMatrix(countData = raw.counts,
                                colData = cond.table,
                                design = ~ condition)
@@ -57,6 +59,9 @@ p1.diff.levels = c("D7", "D9", "D11")
 
 p1.norm.counts = normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)
 
+saveRDS(p1.norm.counts,
+        file = "../r_results/p1_norm_counts_expression.rds")
+
 # p2
 
 p2.raw.counts = master.table %>%
@@ -68,6 +73,9 @@ p2.diff.levels = c("D7", "D9", "D11")
 
 p2.norm.counts = normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)
 
+saveRDS(p2.norm.counts,
+        file = "../r_results/p2_norm_counts_expression.rds")
+
 # pMN
 
 pM.raw.counts = master.table %>%
@@ -78,6 +86,77 @@ pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7
 pM.diff.levels = c("D7", "D9", "D11")
 
 pM.norm.counts = normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)
+
+saveRDS(pM.norm.counts,
+        file = "../r_results/pM_norm_counts_expression.rds")
 ```
 
+Remove the gene expression master table from memory:
+
+```{r, include=T}
+rm(master.table)
+```
+
+Upload the chromatin accessibility master table:
+
+```{r, include=T}
+master.table = read.delim(file = "../input/consensus_peaks.mRp.clN.featureCounts.txt",
+                          header = T,
+                          sep = "\t",
+                          skip = 1)
+
+names(master.table) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(master.table))
+```
+
+Normalise chromatin accessibility across replicates using DESeq2:
+
+```{r, include=T}
+# p1
+
+p1.raw.counts = master.table %>%
+  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p1.*"))))
+
+p1.cond = data.frame(condition = stringr::str_extract(names(p1.raw.counts), "D(7|9|11)"))
+
+p1.diff.levels = c("D7", "D9", "D11")
+
+p1.norm.counts = normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)
+
+saveRDS(p1.norm.counts,
+        file = "../r_results/p1_norm_counts_accessibility.rds")
+
+# p2
+
+p2.raw.counts = master.table %>%
+  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p2.*"))))
+
+p2.cond = data.frame(condition = stringr::str_extract(names(p2.raw.counts), "D(7|9|11)"))
+
+p2.diff.levels = c("D7", "D9", "D11")
+
+p2.norm.counts = normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)
+
+saveRDS(p2.norm.counts,
+        file = "../r_results/p2_norm_counts_accessibility.rds")
+
+# pMN
+
+pM.raw.counts = master.table %>%
+  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_pM.*"))))
+
+pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7|9|11)"))
+
+pM.diff.levels = c("D7", "D9", "D11")
+
+pM.norm.counts = normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)
+
+saveRDS(pM.norm.counts,
+        file = "../r_results/pM_norm_counts_accessibility.rds")
+```
+
+Remove the chromatin accessibility master table from memory:
+
+```{r, include=T}
+rm(master.table)
+```
 
