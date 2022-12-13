@@ -37,6 +37,27 @@ normalize_counts = function(raw.counts, cond.table, diff.levels) {
 }
 ```
 
+Define a function to generate TSS coordinates from transcript coordinates:
+
+```{r, include=T}
+generate_tss = function(tx.ranges, tss.bed.filename) {
+  tss.ranges = GRanges(seqnames = seqnames(tx.ranges),
+                       ranges = IRanges(start = ifelse(strand(tx.ranges) == "+", 
+                                                       start(ranges(tx.ranges)),
+                                                       end(ranges(tx.ranges)) - 1),
+                                        end = ifelse(strand(tx.ranges) == "+", 
+                                                     start(ranges(tx.ranges)) + 1,
+                                                     end(ranges(tx.ranges))),
+                                        names = names(ranges(tx.ranges))),
+                       strand = strand(tx.ranges),
+                       gene_name = tx.ranges$gene_name)
+  
+  export(tss.ranges, tss.bed.filename)
+  
+  return(tss.ranges)
+}
+```
+
 Load the master table:
 
 ```{r, include=T}
