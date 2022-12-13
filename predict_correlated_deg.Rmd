@@ -9,18 +9,62 @@ dyn.load("/home/rstudio/libs/libxml2.so.2")
 library(DESeq2)
 library(dplyr)
 library(GenomicRanges)
-# dyn.load("/home/rstudio/libs/libgsl.so.25")
-# dyn.load("/home/rstudio/libs/libgslcblas.so.0")
 library(tibble)
-# library(Biostrings)
-# library(hypeR)
 library(rtracklayer)
 library(ggplot2)
+library(stringr)
 ```
 
-Set constant FDRs:
+Define a function for DESeq2 count normalisation across replicates:
 
 ```{r, include=T}
+normalize_counts = function(raw.counts, cond.table, diff.levels) {
+  raw.counts = round(raw.counts)
+  
+  row.names(cond.table) = names(raw.counts)
+  
+  cond.table$condition = factor(cond.table$condition, levels = diff.levels)
+  
+  dds = DESeqDataSetFromMatrix(countData = raw.counts,
+                               colData = cond.table,
+                               design = ~ condition)
+  
+  dds = DESeq(dds)
+
+  dds = estimateSizeFactors(dds)
+
+  return(counts(dds, normalized = T))
+}
+```
+
+Load the master table:
+
+```{r, include=T}
+master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts
+```
+
+Normalise gene expression across replicates using DESeq2:
+
+```{r, include=T}
+# p1
+
+p1.raw.counts = master.table %>%
+  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p1.*"))))
+
+p1.cond = data.frame(condition = stringr::str_extract(names(p1.raw.counts), "D(7|9|11)"))
+
+p1.diff.levels = c("D7", "D9", "D11")
+
+p1.norm.counts = normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)
+
+# p2
+
+
+
+# pMN
+
+
 
 ```
+
 
