@@ -12,8 +12,9 @@ dyn.load("/home/rstudio/libs/libgsl.so.25")
 dyn.load("/home/rstudio/libs/libgslcblas.so.0")
 library(tibble)
 library(Biostrings)
-library(rtracklayer)
 library(hypeR)
+library(rtracklayer)
+library(ggplot2)
 ```
 
 Set constant FDRs:
@@ -21,6 +22,27 @@ Set constant FDRs:
 ```{r, include=T}
 fdr.degs = 0.05
 fdr.matches = 0.05
+```
+
+Prepare a function to generate TSS coordinates from transcript coordinates:
+
+```{r, include=T}
+generate_tss = function(tx.ranges, tss.bed.filename) {
+  tss.ranges = GRanges(seqnames = seqnames(tx.ranges),
+                       ranges = IRanges(start = ifelse(strand(tx.ranges) == "+", 
+                                                       start(ranges(tx.ranges)),
+                                                       end(ranges(tx.ranges)) - 1),
+                                        end = ifelse(strand(tx.ranges) == "+", 
+                                                     start(ranges(tx.ranges)) + 1,
+                                                     end(ranges(tx.ranges))),
+                                        names = names(ranges(tx.ranges))),
+                       strand = strand(tx.ranges),
+                       gene_name = tx.ranges$gene_name)
+  
+  export(tss.ranges, tss.bed.filename)
+  
+  return(tss.ranges)
+}
 ```
 
 Prepare a general function to generate predictions:
@@ -38,39 +60,136 @@ predict_targets = function(cutoff.list, domain.name) {
                                      "_in-regions-of_fdr", fdr.regions, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
   
   if (domain.name == "p1") {
-    p.deg.annot.ranges = p1.deg.annot.ranges
+    p.deg.tss.ranges = p1.deg.tss.ranges
   } else if (domain.name == "p2") {
-    p.deg.annot.ranges = p2.deg.annot.ranges
+    p.deg.tss.ranges = p2.deg.tss.ranges
   } else if (domain.name == "pM") {
-    p.deg.annot.ranges = pM.deg.annot.ranges
+    p.deg.tss.ranges = pM.deg.tss.ranges
   } else {
     cat("Unknown domain!")
-    p.deg.annot.ranges = NULL
+    p.deg.tss.ranges = NULL
   }
   
-  p.deg.tss.ranges = GRanges(seqnames = seqnames(p.deg.annot.ranges),
-                             ranges = IRanges(start = start(ranges(p.deg.annot.ranges)),
-                                              end = start(ranges(p.deg.annot.ranges)) + 1,
-                                              names = names(ranges(p.deg.annot.ranges))),
-                             strand = strand(p.deg.annot.ranges),
-                             gene_name = p.deg.annot.ranges$gene_name)
-  
-  p.nfia.targets.nums = GenomicRanges::nearest(p.dep.nfia.ranges, p.deg.tss.ranges)
+  p.nfia.targets.nums = GenomicRanges::nearest(p.dep.nfia.ranges, p.deg.tss.ranges, ignore.strand = T)
 
   p.nfia.targets = p.deg.tss.ranges[p.nfia.targets.nums]$gene_name
   
-  p.nfia.targets.dist = GenomicRanges::distanceToNearest(p.dep.nfia.ranges, p.deg.tss.ranges)
+  p.nfia.targets.dist = GenomicRanges::distanceToNearest(p.dep.nfia.ranges, p.deg.tss.ranges, ignore.strand = T)
   
   relative.location.df = data.frame(region_start = start(ranges(p.dep.nfia.ranges)),
                                     region_end = end(ranges(p.dep.nfia.ranges)),
-                                    tss_coord = start(ranges(p.deg.tss.ranges[p.nfia.targets.nums]))) %>%
-    mutate(region_to_target = ifelse(tss_coord > region_end, "upstream",
-                                     ifelse(tss_coord < region_start, "downstream", "overlap")))
+                                    tss_coord = start(ranges(p.deg.tss.ranges[p.nfia.targets.nums])),
+                                    tss_strand = strand(p.deg.tss.ranges[p.nfia.targets.nums])) %>%
+    mutate(region_to_target = ifelse(tss_coord >= region_start & tss_coord <= region_end, "overlap",
+                                     ifelse(tss_strand == "+",
+                                            ifelse(tss_coord > region_end, "upstream", "downstream"),
+                                            ifelse(tss_coord > region_end, "downstream", "upstream"))))
   
   return(data.frame(regions = names(p.dep.nfia.ranges),
                     targets = p.nfia.targets,
                     dist_to_target = p.nfia.targets.dist,
                     region_to_target = relative.location.df$region_to_target))
+}
+```
+
+Prepare a function to select predictions within TADs:
+
+```{r, include=T}
+fragments_to_granges = function(regions.tss.fragments) {
+  return(GRanges(seqnames = regions.tss.fragments$seqnames,
+                 ranges = IRanges(start = regions.tss.fragments$start,
+                                  end = regions.tss.fragments$end,
+                                  names = regions.tss.fragments$fragment_names),
+                 strand = strand(Rle("+"))))
+}
+
+predict_targets_in_tads = function(cutoff.list, p.df, domain.name) {
+  fdr.regions = unlist(cutoff.list)["fdr.regions"]
+  
+  min.l2fc = unlist(cutoff.list)["min.l2fc"]
+  
+  min.baseMean = unlist(cutoff.list)["min.baseMean"]
+  
+  p.dep.nfia.ranges = readRDS(paste0("../r_results/select_diff_regions/", 
+                                     domain.name, "_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                     "_in-regions-of_fdr", fdr.regions, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+  
+  if (domain.name == "p1") {
+    p.deg.tss.ranges = p1.deg.tss.ranges
+  } else if (domain.name == "p2") {
+    p.deg.tss.ranges = p2.deg.tss.ranges
+  } else if (domain.name == "pM") {
+    p.deg.tss.ranges = pM.deg.tss.ranges
+  } else {
+    cat("Unknown domain!")
+    p.deg.tss.ranges = NULL
+  }
+  
+  p.regions.tss.fragments = p.df %>%
+    dplyr::select(regions, targets) %>%
+    left_join(as.data.frame(p.dep.nfia.ranges) %>%
+                rownames_to_column(var = "region_id"),
+              by = c("regions" = "region_id")) %>%
+    dplyr::select(-width,
+                  -strand) %>%
+    dplyr::rename("seqnames_regions" = "seqnames",
+                  "start_regions" = "start",
+                  "end_regions" = "end") %>%
+    left_join(as.data.frame(p.deg.tss.ranges) %>%
+                rownames_to_column(var = "tx_id") %>%
+                dplyr::select(-width,
+                              -strand) %>%
+                dplyr::rename("seqnames_targets" = "seqnames",
+                              "start_targets" = "start",
+                              "end_targets" = "end"),
+              by = c("targets" = "gene_name")) %>%
+    rowwise() %>%
+    mutate(start_fragments = min(start_regions, start_targets),
+           end_fragments = max(end_regions, end_targets)) %>%
+    ungroup() %>%
+    dplyr::select(regions,
+                  targets,
+                  seqnames_regions,
+                  start_fragments,
+                  end_fragments) %>%
+    dplyr::rename("seqnames_fragments" = "seqnames_regions") %>%
+    rowwise() %>%
+    mutate(fragment_names = paste0(regions, "|", targets)) %>%
+    ungroup() %>%
+    dplyr::select(-regions,
+                  -targets) %>%
+    dplyr::select(fragment_names,
+                  seqnames_fragments,
+                  start_fragments,
+                  end_fragments) %>%
+    dplyr::rename("seqnames" = "seqnames_fragments",
+                  "start" = "start_fragments",
+                  "end" = "end_fragments") %>%
+    distinct()
+
+  p.fragment.ranges = fragments_to_granges(p.regions.tss.fragments)
+
+  export(p.fragment.ranges,
+         paste0("../r_results/predict_closest_deg/", 
+                domain.name, "_fragment_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                "_in-regions-of_fdr", fdr.regions, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, 
+                "in_tads_of0.5-1.5Mbp.bed"))
+  
+  p.in.selected.tads = GenomicRanges::findOverlaps(query = p.fragment.ranges, 
+                                                   subject = tads.size.selected,
+                                                   type = "within",
+                                                   select = "all",
+                                                   ignore.strand = T)
+  
+  p.predictions.within.selected.tads = p.fragment.ranges[unique(queryHits(p.in.selected.tads))]
+  
+  export(p.predictions.within.selected.tads,
+         paste0("../r_results/predict_closest_deg/", 
+                domain.name, "_predictions_within_selected_tads_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                "_in-regions-of_fdr", fdr.regions, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, 
+                "in_tads_of0.5-1.5Mbp.bed"))
+  
+  return(p.predictions.within.selected.tads)
 }
 ```
 
@@ -108,7 +227,7 @@ summarise_predictions = function(predictions.df, domain.name) {
   cat("Predicted targets / All DEGs (expected proportion of predicted ref. genes):", 
       n.pred, "/", n.degs, "(", round(n.pred / n.degs * 100, 2), "% )\n")
   
-  cat("Predicted reference genes / All predicted targets (observed proportion of predicted ref. genes):", 
+  cat("Predicted reference genes / All reference genes (observed proportion of predicted ref. genes):", 
       n.prrf, "/", n.refs, "(", round(n.prrf / n.refs * 100, 2), "% )\n")
   
   cat("Enrichment of reference genes among predicted ones (observed / expected):",
@@ -139,22 +258,61 @@ summarise_predictions = function(predictions.df, domain.name) {
   cat("Number of regions proximal to their predicted reference targets:", n.proximal.to.ref.regions, "\n")
   
   return(hyp.obj)
+}
+```
+
+Prepare a function to summarise predictions within TADs:
+
+```{r, include=T}
+summarise_predictions_in_tads = function(predictions.ranges, domain.name) {
+  if (domain.name == "p1") {
+    p.deg.annot.ranges = p1.deg.annot.ranges
+    p.ref.genes = p1.ref.genes
+  } else if (domain.name == "p2") {
+    p.deg.annot.ranges = p2.deg.annot.ranges
+    p.ref.genes = p2.ref.genes
+  } else if (domain.name == "pM") {
+    p.deg.annot.ranges = pM.deg.annot.ranges
+    p.ref.genes = pM.ref.genes
+  } else {
+    cat("Unknown domain!")
+    p.deg.annot.ranges = NULL
+    p.ref.genes = NULL
+  }
   
-  # return(list("enr" = round(log2((n.prrf / n.refs) / (n.pred / n.degs)), 2),
-  #             "prx" = round(n.proximal.regions / n.regions, 2),
-  #             "hyp" = hyp.obj))
+  degs = unique(p.deg.annot.ranges$gene_name)
   
-  # dist.plot = data.frame(category = rep("elements", 2),
-  #            dist_group = c("proximal", "distal"),
-  #            freq = c(n.proximal.regions / n.regions,
-  #                     1 - n.proximal.regions / n.regions)) %>%
-  #   mutate(dist_group = factor(dist_group, levels = c("proximal", "distal"))) %>%
-  #   ggplot(aes(x = category,
-  #              y = freq)) +
-  #     geom_col(aes(fill = dist_group)) +
-  #     theme_classic()
-  # 
-  # ggsave(dist.plot.filename, dist.plot)
+  pred = unique(unname(t(as.data.frame(strsplit(names(predictions.ranges), "|", fixed = T)))[, 2]))
+  
+  n.degs = length(degs)
+  
+  n.pred = length(pred)
+  
+  n.refs = length(p.ref.genes)
+  
+  n.prrf = length(p.ref.genes[p.ref.genes %in% pred])
+  
+  cat("Predicted targets / All DEGs (expected proportion of predicted ref. genes):", 
+      n.pred, "/", n.degs, "(", round(n.pred / n.degs * 100, 2), "% )\n")
+  
+  cat("Predicted reference genes / All reference genes (observed proportion of predicted ref. genes):", 
+      n.prrf, "/", n.refs, "(", round(n.prrf / n.refs * 100, 2), "% )\n")
+  
+  cat("Enrichment of reference genes among predicted ones (observed / expected):",
+      round((n.prrf / n.refs) / (n.pred / n.degs), 2), "\n")
+  
+  n.regions = length(unique(unname(t(as.data.frame(strsplit(names(predictions.ranges), "|", fixed = T)))[, 1])))
+  
+  cat("Total number of regions:", n.regions, "\n")
+  
+  hyp.obj = hypeR(signature = p.ref.genes,
+                  genesets = list("ALL_PREDICTED" = pred,
+                                  "NON_PREDICTED" = degs[!degs %in% pred]), 
+                  test = "hypergeometric", 
+                  background = unique(p.deg.annot.ranges$gene_name), # all DEGs
+                  fdr = 0.05)
+  
+  return(hyp.obj)
 }
 ```
 
@@ -202,7 +360,7 @@ All reference genes are present, as expected.
 
 ## Find genomic coordinates of DEGs from WT-D11 vs WT-D7
 
-Find the genomic coordinates of genes differentially expressed between WT-D11 and WT-D7 in p1, p2 and pMN:
+Find the genomic coordinates of genes differentially expressed between WT-D11 and WT-D7 in p1, p2 and pMN and then find the coordinates of their TSSs:
 
 ```{r, include = T}
 p1.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds"))
@@ -221,6 +379,12 @@ p1.deg.annot.ranges = GRanges(seqnames = p1.deg.annot$chr,
                               strand = strand(p1.deg.annot$strand),
                               gene_name = p1.deg.annot$gene_name)
 
+p1.deg.tss.ranges = generate_tss(p1.deg.annot.ranges, "../r_results/predict_closest_deg/p1_deg_tss.bed")
+
+p1.ref.tss.ranges = p1.deg.tss.ranges[p1.deg.tss.ranges$gene_name %in% p1.ref.genes]
+
+export(p1.ref.tss.ranges, "../r_results/predict_closest_deg/p1_ref_tss.bed")
+
 p2.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds"))
 
 p2.res.sign.gene_names = p2.res %>%
@@ -237,6 +401,12 @@ p2.deg.annot.ranges = GRanges(seqnames = p2.deg.annot$chr,
                               strand = strand(p2.deg.annot$strand),
                               gene_name = p2.deg.annot$gene_name)
 
+p2.deg.tss.ranges = generate_tss(p2.deg.annot.ranges, "../r_results/predict_closest_deg/p2_deg_tss.bed")
+
+p2.ref.tss.ranges = p2.deg.tss.ranges[p2.deg.tss.ranges$gene_name %in% p2.ref.genes]
+
+export(p2.ref.tss.ranges, "../r_results/predict_closest_deg/p2_ref_tss.bed")
+
 pM.res = as.data.frame(readRDS("../r_results/diff_expression/tables/deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds"))
 
 pM.res.sign.gene_names = pM.res %>%
@@ -252,6 +422,12 @@ pM.deg.annot.ranges = GRanges(seqnames = pM.deg.annot$chr,
                                                names = pM.deg.annot$tx_name),
                               strand = strand(pM.deg.annot$strand),
                               gene_name = pM.deg.annot$gene_name)
+
+pM.deg.tss.ranges = generate_tss(pM.deg.annot.ranges, "../r_results/predict_closest_deg/pM_deg_tss.bed")
+
+pM.ref.tss.ranges = pM.deg.tss.ranges[pM.deg.tss.ranges$gene_name %in% pM.ref.genes]
+
+export(pM.ref.tss.ranges, "../r_results/predict_closest_deg/pM_ref_tss.bed")
 ```
 
 ## Predict NFIA targets in p1, p2 and pMN as closest DEGs
@@ -293,6 +469,26 @@ hyp_show(p1.3.df.hyp)
 
 hyp_show(p1.4.df.hyp)
 
+saveRDS(p1.1.df, file = "../r_results/predict_closest_deg/tables/p1_stringency1_predictions.rds")
+
+saveRDS(p1.2.df, file = "../r_results/predict_closest_deg/tables/p1_stringency2_predictions.rds")
+
+saveRDS(p1.3.df, file = "../r_results/predict_closest_deg/tables/p1_stringency3_predictions.rds")
+
+saveRDS(p1.4.df, file = "../r_results/predict_closest_deg/tables/p1_stringency4_predictions.rds")
+
+write.table(p1.1.df, file = "../r_results/predict_closest_deg/tables/p1_stringency1_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(p1.2.df, file = "../r_results/predict_closest_deg/tables/p1_stringency2_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(p1.3.df, file = "../r_results/predict_closest_deg/tables/p1_stringency3_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(p1.4.df, file = "../r_results/predict_closest_deg/tables/p1_stringency4_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
 # p2
 
 p2.1.df = predict_targets(list(region.sign.cutoffs.1), domain.name = "p2")
@@ -319,6 +515,26 @@ hyp_show(p2.3.df.hyp)
 
 hyp_show(p2.4.df.hyp)
 
+saveRDS(p2.1.df, file = "../r_results/predict_closest_deg/tables/p2_stringency1_predictions.rds")
+
+saveRDS(p2.2.df, file = "../r_results/predict_closest_deg/tables/p2_stringency2_predictions.rds")
+
+saveRDS(p2.3.df, file = "../r_results/predict_closest_deg/tables/p2_stringency3_predictions.rds")
+
+saveRDS(p2.4.df, file = "../r_results/predict_closest_deg/tables/p2_stringency4_predictions.rds")
+
+write.table(p2.1.df, file = "../r_results/predict_closest_deg/tables/p2_stringency1_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(p2.2.df, file = "../r_results/predict_closest_deg/tables/p2_stringency2_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(p2.3.df, file = "../r_results/predict_closest_deg/tables/p2_stringency3_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(p2.4.df, file = "../r_results/predict_closest_deg/tables/p2_stringency4_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
 # pMN
 
 pM.1.df = predict_targets(list(region.sign.cutoffs.1), domain.name = "pM")
@@ -344,4 +560,523 @@ hyp_show(pM.2.df.hyp)
 hyp_show(pM.3.df.hyp)
 
 hyp_show(pM.4.df.hyp)
+
+saveRDS(pM.1.df, file = "../r_results/predict_closest_deg/tables/pM_stringency1_predictions.rds")
+
+saveRDS(pM.2.df, file = "../r_results/predict_closest_deg/tables/pM_stringency2_predictions.rds")
+
+saveRDS(pM.3.df, file = "../r_results/predict_closest_deg/tables/pM_stringency3_predictions.rds")
+
+saveRDS(pM.4.df, file = "../r_results/predict_closest_deg/tables/pM_stringency4_predictions.rds")
+
+write.table(pM.1.df, file = "../r_results/predict_closest_deg/tables/pM_stringency1_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(pM.2.df, file = "../r_results/predict_closest_deg/tables/pM_stringency2_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(pM.3.df, file = "../r_results/predict_closest_deg/tables/pM_stringency3_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+
+write.table(pM.4.df, file = "../r_results/predict_closest_deg/tables/pM_stringency4_predictions.tsv",
+            quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+Select predictions only within a +/-500 kbp areas:
+
+```{r, include=T}
+max.dist = 500000 # 500 kbp
+
+# p1
+
+p1.1.df.lim = p1.1.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.2.df.lim = p1.2.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.3.df.lim = p1.3.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.4.df.lim = p1.4.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+cat("Number of elements with an assigned closest gene within the limited area-1:", nrow(p1.1.df.lim), "(", round(nrow(p1.1.df.lim) / nrow(p1.1.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-2:", nrow(p1.2.df.lim), "(", round(nrow(p1.2.df.lim) / nrow(p1.2.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-3:", nrow(p1.3.df.lim), "(", round(nrow(p1.3.df.lim) / nrow(p1.3.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-4:", nrow(p1.4.df.lim), "(", round(nrow(p1.4.df.lim) / nrow(p1.4.df) * 100, 2), "% )\n")
+
+p1.1.df.hyp.lim = summarise_predictions(p1.1.df.lim, domain.name = "p1")
+
+p1.2.df.hyp.lim = summarise_predictions(p1.2.df.lim, domain.name = "p1")
+
+p1.3.df.hyp.lim = summarise_predictions(p1.3.df.lim, domain.name = "p1")
+
+p1.4.df.hyp.lim = summarise_predictions(p1.4.df.lim, domain.name = "p1")
+
+hyp_show(p1.1.df.hyp.lim)
+
+hyp_show(p1.2.df.hyp.lim)
+
+hyp_show(p1.3.df.hyp.lim)
+
+hyp_show(p1.4.df.hyp.lim)
+
+# p2
+
+p2.1.df.lim = p2.1.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p2.2.df.lim = p2.2.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p2.3.df.lim = p2.3.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p2.4.df.lim = p2.4.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+cat("Number of elements with an assigned closest gene within the limited area-1:", nrow(p2.1.df.lim), "(", round(nrow(p2.1.df.lim) / nrow(p2.1.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-2:", nrow(p2.2.df.lim), "(", round(nrow(p2.2.df.lim) / nrow(p2.2.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-3:", nrow(p2.3.df.lim), "(", round(nrow(p2.3.df.lim) / nrow(p2.3.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-4:", nrow(p2.4.df.lim), "(", round(nrow(p2.4.df.lim) / nrow(p2.4.df) * 100, 2), "% )\n")
+
+p2.1.df.hyp.lim = summarise_predictions(p2.1.df.lim, domain.name = "p2")
+
+p2.2.df.hyp.lim = summarise_predictions(p2.2.df.lim, domain.name = "p2")
+
+p2.3.df.hyp.lim = summarise_predictions(p2.3.df.lim, domain.name = "p2")
+
+p2.4.df.hyp.lim = summarise_predictions(p2.4.df.lim, domain.name = "p2")
+
+hyp_show(p2.1.df.hyp.lim)
+
+hyp_show(p2.2.df.hyp.lim)
+
+hyp_show(p2.3.df.hyp.lim)
+
+hyp_show(p2.4.df.hyp.lim)
+
+# pM
+
+pM.1.df.lim = pM.1.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+pM.2.df.lim = pM.2.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+pM.3.df.lim = pM.3.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+pM.4.df.lim = pM.4.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+cat("Number of elements with an assigned closest gene within the limited area-1:", nrow(pM.1.df.lim), "(", round(nrow(pM.1.df.lim) / nrow(pM.1.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-2:", nrow(pM.2.df.lim), "(", round(nrow(pM.2.df.lim) / nrow(pM.2.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-3:", nrow(pM.3.df.lim), "(", round(nrow(pM.3.df.lim) / nrow(pM.3.df) * 100, 2), "% )\n")
+
+cat("Number of elements with an assigned closest gene within the limited area-4:", nrow(pM.4.df.lim), "(", round(nrow(pM.4.df.lim) / nrow(pM.4.df) * 100, 2), "% )\n")
+
+pM.1.df.hyp.lim = summarise_predictions(pM.1.df.lim, domain.name = "pM")
+
+pM.2.df.hyp.lim = summarise_predictions(pM.2.df.lim, domain.name = "pM")
+
+pM.3.df.hyp.lim = summarise_predictions(pM.3.df.lim, domain.name = "pM")
+
+pM.4.df.hyp.lim = summarise_predictions(pM.4.df.lim, domain.name = "pM")
+
+hyp_show(pM.1.df.hyp.lim)
+
+hyp_show(pM.2.df.hyp.lim)
+
+hyp_show(pM.3.df.hyp.lim)
+
+hyp_show(pM.4.df.hyp.lim)
+```
+
+Select examples of assigned and unassigned reference genes in the closest-DEG results:
+
+```{r, include=T}
+p1.1.df = readRDS("../r_results/predict_closest_deg/tables/p1_stringency1_predictions.rds")
+
+p1.2.df = readRDS("../r_results/predict_closest_deg/tables/p1_stringency2_predictions.rds")
+
+p1.3.df = readRDS("../r_results/predict_closest_deg/tables/p1_stringency3_predictions.rds")
+
+p1.4.df = readRDS("../r_results/predict_closest_deg/tables/p1_stringency4_predictions.rds")
+
+p1.ref.genes = readRDS("../r_results/diff_expression/tables/p1_ref_genes.rds")
+
+p1.1.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.1.df$targets)]
+
+p1.2.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.2.df$targets)]
+
+p1.3.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.3.df$targets)]
+
+p1.4.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.4.df$targets)]
+
+p1.1.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.1.df$targets)]
+
+p1.2.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.2.df$targets)]
+
+p1.3.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.3.df$targets)]
+
+p1.4.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.4.df$targets)]
+
+# Assigned
+
+# Mmd2 from p1.2.ref.paired[!p1.2.ref.paired %in% p1.1.ref.paired]
+
+# Notch2 from p1.3.ref.paired[!p1.3.ref.paired %in% p1.2.ref.paired]
+
+# Unassigned
+
+# Timp4 and Hoxa9 from p1.4.ref.unpaired
+```
+
+Select examples of assigned and unassigned reference genes in the closest-DEG-within-500kbp results:
+
+```{r, include=T}
+p1.1.df.lim = p1.1.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.2.df.lim = p1.2.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.3.df.lim = p1.3.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.4.df.lim = p1.4.df %>%
+  filter(dist_to_target.distance <= max.dist)
+
+p1.1.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.1.df.lim$targets)]
+
+p1.2.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.2.df.lim$targets)]
+
+p1.3.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.3.df.lim$targets)]
+
+p1.4.ref.paired = p1.ref.genes[p1.ref.genes %in% unique(p1.4.df.lim$targets)]
+
+p1.1.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.1.df.lim$targets)]
+
+p1.2.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.2.df.lim$targets)]
+
+p1.3.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.3.df.lim$targets)]
+
+p1.4.ref.unpaired = p1.ref.genes[!p1.ref.genes %in% unique(p1.4.df.lim$targets)]
+
+# Assigned
+
+# Fam198b from p1.1.ref.paired
+
+# Mmd2 from p1.2.ref.paired[!p1.2.ref.paired %in% p1.1.ref.paired]
+
+# Unassigned
+
+# Timp4 and Hoxa9 from p1.4.ref.unpaired
+```
+
+Select examples of assigned and unassigned elements in the closest-DEG-within-500kbp results:
+
+```{r, include=T}
+p1.1.elements = readRDS("../r_results/select_diff_regions/p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_0.05_in-regions-of_fdr0.01_min-l2fc2_min-baseMean100.rds")
+
+# Assigned
+
+# Interval_2084 from p1.1.df.lim$regions
+
+# Interval_1769 from p1.2.df.lim$regions[!p1.2.df.lim$regions %in% p1.1.df.lim$regions]
+
+# Unassigned
+
+# Interval_1289 and Interval_3723 from head(names(p1.1.elements)[!names(p1.1.elements) %in% p1.1.df.lim$regions])
+```
+
+Predict NFIA targets within TADs in p1:
+
+```{r, include=T}
+tads = rtracklayer::import("../input/10_selected_tads_no-emply-line.bed")
+
+tads.size.selected = tads[end(ranges(tads)) - start(ranges(tads)) >= 500000 & 
+                          end(ranges(tads)) - start(ranges(tads)) <= 1500000]
+
+export(tads.size.selected,
+       "../r_results/predict_closest_deg/tads_size_selected_0.5-1.5Mbp.bed")
+
+p1.1.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.1, p1.1.df, "p1")
+
+p1.1.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p1.1.predictions.within.selected.tads, "p1")
+
+hyp_show(p1.1.predictions.within.selected.tads.hyp)
+
+p1.2.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.2, p1.2.df, "p1")
+
+p1.2.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p1.2.predictions.within.selected.tads, "p1")
+
+hyp_show(p1.2.predictions.within.selected.tads.hyp)
+
+p1.3.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.3, p1.3.df, "p1")
+
+p1.3.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p1.3.predictions.within.selected.tads, "p1")
+
+hyp_show(p1.3.predictions.within.selected.tads.hyp)
+
+p1.4.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.4, p1.4.df, "p1")
+
+p1.4.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p1.4.predictions.within.selected.tads, "p1")
+
+hyp_show(p1.4.predictions.within.selected.tads.hyp)
+```
+
+Predict NFIA targets within TADs in p2:
+
+```{r, include=T}
+p2.1.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.1, p2.1.df, "p2")
+
+p2.1.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p2.1.predictions.within.selected.tads, "p2")
+
+hyp_show(p2.1.predictions.within.selected.tads.hyp)
+
+p2.2.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.2, p2.2.df, "p2")
+
+p2.2.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p2.2.predictions.within.selected.tads, "p2")
+
+hyp_show(p2.2.predictions.within.selected.tads.hyp)
+
+p2.3.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.3, p2.3.df, "p2")
+
+p2.3.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p2.3.predictions.within.selected.tads, "p2")
+
+hyp_show(p2.3.predictions.within.selected.tads.hyp)
+
+p2.4.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.4, p2.4.df, "p2")
+
+p2.4.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(p2.4.predictions.within.selected.tads, "p2")
+
+hyp_show(p2.4.predictions.within.selected.tads.hyp)
+```
+
+Predict NFIA targets within TADs in pMN:
+
+```{r, include=T}
+pM.1.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.1, pM.1.df, "pM")
+
+pM.1.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(pM.1.predictions.within.selected.tads, "pM")
+
+hyp_show(pM.1.predictions.within.selected.tads.hyp)
+
+pM.2.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.2, pM.2.df, "pM")
+
+pM.2.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(pM.2.predictions.within.selected.tads, "pM")
+
+hyp_show(pM.2.predictions.within.selected.tads.hyp)
+
+pM.3.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.3, pM.3.df, "pM")
+
+pM.3.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(pM.3.predictions.within.selected.tads, "pM")
+
+hyp_show(pM.3.predictions.within.selected.tads.hyp)
+
+pM.4.predictions.within.selected.tads = predict_targets_in_tads(region.sign.cutoffs.4, pM.4.df, "pM")
+
+pM.4.predictions.within.selected.tads.hyp = summarise_predictions_in_tads(pM.4.predictions.within.selected.tads, "pM")
+
+hyp_show(pM.4.predictions.within.selected.tads.hyp)
+```
+
+Make comparative bar plots:
+
+```{r, include=T}
+group_ids = c(rep("S1", 3), rep("S2", 3), rep("S3", 3), rep("S4", 3))
+
+method_ids = rep(c("Closest", "Closest, +/-500 kbp", "Closest in TAD"), 4)
+
+# p1
+
+# Assigned NFIA elements
+p1.elem.plot = data.frame(group_id = group_ids,
+                          method_id = method_ids,
+                          y = c(100, 53.32, 22.9,
+                                100, 45.86, 23.4,
+                                100, 48.1,  24.1,
+                                100, 47.69, 23.6)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    theme_classic() +
+    ylab("% of assigned NFIA elements") +
+    ylim(min = 0, max = 100)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/p1_elem_barplot.pdf",
+       plot = p1.elem.plot)
+
+# Assigned reference genes
+p1.ref.gene.plot = data.frame(group_id = group_ids,
+                              method_id = method_ids,
+                              y = c(26.67, 13.33, 11.11,
+                                    66.67, 57.78, 26.67,
+                                    84.44, 82.22, 40,
+                                    88.89, 88.89, 40)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    theme_classic() +
+    ylab("% of assigned reference genes") +
+    ylim(min = 0, max = 100)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/p1_ref_gene_barplot.pdf",
+       plot = p1.ref.gene.plot)
+
+# Enrichment of predicted genes among reference genes
+p1.enrichment.plot = data.frame(group_id = group_ids,
+                                method_id = method_ids,
+                                y = c(1.06, 0.87, 1.68,
+                                      0.97, 1.08, 1,
+                                      1.01, 1.09, 1.1,
+                                      1.02, 1.08, 1.03)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    geom_hline(yintercept = 1) +
+    theme_classic() +
+    ylab("Enrichment of predicted genes among reference genes") +
+    ylim(min = 0, max = 2)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/p1_enrichment_barplot.pdf",
+       plot = p1.enrichment.plot)
+
+# p2
+
+# Assigned NFIA elements
+p2.elem.plot = data.frame(group_id = group_ids,
+                          method_id = method_ids,
+                          y = c(100, 57.63, 28.5,
+                                100, 50.67, 25.6,
+                                100, 54.09, 27.2,
+                                100, 53.59, 27.0)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    theme_classic() +
+    ylab("% of assigned NFIA elements") +
+    ylim(min = 0, max = 100)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/p2_elem_barplot.pdf",
+       plot = p2.elem.plot)
+
+# Assigned reference genes
+p2.ref.gene.plot = data.frame(group_id = group_ids,
+                              method_id = method_ids,
+                              y = c(38.18, 36.36, 16.36,
+                                    72.73, 69.09, 25.45,
+                                    92.73, 92.73, 36.36,
+                                    92.73, 92.73, 36.36)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    theme_classic() +
+    ylab("% of assigned reference genes") +
+    ylim(min = 0, max = 100)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/p2_ref_gene_barplot.pdf",
+       plot = p2.ref.gene.plot)
+
+# Enrichment of predicted genes among reference genes
+p2.enrichment.plot = data.frame(group_id = group_ids,
+                                method_id = method_ids,
+                                y = c(0.98, 1.33, 1.24,
+                                      0.97, 1.06, 0.81,
+                                      1.07, 1.14, 0.89,
+                                      1.04, 1.09, 0.85)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    geom_hline(yintercept = 1) +
+    theme_classic() +
+    ylab("Enrichment of predicted genes among reference genes") +
+    ylim(min = 0, max = 2)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/p2_enrichment_barplot.pdf",
+       plot = p2.enrichment.plot)
+
+# pM
+
+# Assigned NFIA elements
+pM.elem.plot = data.frame(group_id = group_ids,
+                          method_id = method_ids,
+                          y = c(100, 65.75, 29.6,
+                                100, 58.25, 28.3,
+                                100, 61.16, 29.7,
+                                100, 60.63, 29.3)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    theme_classic() +
+    ylab("% of assigned NFIA elements") +
+    ylim(min = 0, max = 100)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/pM_elem_barplot.pdf",
+       plot = pM.elem.plot)
+
+# Assigned reference genes
+pM.ref.gene.plot = data.frame(group_id = group_ids,
+                              method_id = method_ids,
+                              y = c(43.4,  40.57, 16.04,
+                                    73.58, 71.7,  29.25,
+                                    91.51, 91.51, 39.62,
+                                    94.34, 94.34, 41.51)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    theme_classic() +
+    ylab("% of assigned reference genes") +
+    ylim(min = 0, max = 100)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/pM_ref_gene_barplot.pdf",
+       plot = pM.ref.gene.plot)
+
+# Enrichment of predicted genes among reference genes
+
+pM.enrichment.plot = data.frame(group_id = group_ids,
+                                method_id = method_ids,
+                                y = c(1.25, 1.56, 1.32,
+                                      1.03, 1.13, 0.95,
+                                      1.1,  1.15, 1.03,
+                                      1.1,  1.15, 1.04)) %>%
+  mutate(method_id = factor(method_id, levels = c("Closest", "Closest, +/-500 kbp", "Closest in TAD"))) %>%
+  ggplot(aes(x = group_id,
+             y = y,
+             fill = method_id)) +
+    geom_col(position = "dodge") +
+    geom_hline(yintercept = 1) +
+    theme_classic() +
+    ylab("Enrichment of predicted genes among reference genes") +
+    ylim(min = 0, max = 2)
+
+ggsave(filename = "../r_results/predict_closest_deg/plots/pM_enrichment_barplot.pdf",
+       plot = pM.enrichment.plot)
 ```

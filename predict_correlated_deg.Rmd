@@ -1,0 +1,26 @@
+---
+title: "predict_correlated_deg"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+dyn.load("/home/rstudio/libs/libxml2.so.2")
+library(DESeq2)
+library(dplyr)
+library(GenomicRanges)
+# dyn.load("/home/rstudio/libs/libgsl.so.25")
+# dyn.load("/home/rstudio/libs/libgslcblas.so.0")
+library(tibble)
+# library(Biostrings)
+# library(hypeR)
+library(rtracklayer)
+library(ggplot2)
+```
+
+Set constant FDRs:
+
+```{r, include=T}
+
+```
+

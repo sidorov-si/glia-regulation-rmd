@@ -25,6 +25,14 @@ fdr = 0.01
 min.l2fc = 2 # Min log2(fold change)
 min.baseMean = 100
 
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 0
+
+# fdr = 0.01
+# min.l2fc = 0 # Min log2(fold change)
+# min.baseMean = 0
+
 # fdr = 0.05
 # min.l2fc = 0 # Min log2(fold change)
 # min.baseMean = 0
@@ -109,7 +117,6 @@ analyse_diff_accessibility = function(cond.target.long, cond.ref.long,
     geom_point(size = 2) +
     xlab(paste0("PC1: ", p.percentVar[1], "% variance")) +
     ylab(paste0("PC2: ", p.percentVar[2], "% variance")) + 
-    #coord_fixed() +
     theme_classic()
   
   ggsave(filename = paste0("../r_results/diff_accessibility/plots/pca_", cond.target.long, "_vs_", cond.ref.long,
@@ -234,7 +241,7 @@ p2.11.7.dep = intersect(p2.11.7.res.up, p2.mut.wt.res.down)
 
 pM.11.7.dep = intersect(pM.11.7.res.up, pM.mut.wt.res.down)
 
-# Save these sets of genes
+# Save these sets of regions
 saveRDS(p1.11.7.dep, file = paste0("../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep", 
                                    "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
 

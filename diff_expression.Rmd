@@ -139,8 +139,8 @@ plot_deg_proportions = function(p.deseq.object, deg.proportions.plot.filename) {
   
   p.freq.nonsign = 1 - p.freq.up - p.freq.down
   
-  p.freq.df = data.frame(freq     = c(p.freq.up, p.freq.down, p.freq.nonsign),
-                         category = c("Up",      "Down",      "Non-significant"),
+  p.freq.df = data.frame(freq         = c(p.freq.up, p.freq.down, p.freq.nonsign),
+                         category     = c("Up",      "Down",      "Non-significant"),
                          element_type = "Genes") %>%
     dplyr::mutate(category = factor(category, levels = category))
   
@@ -202,7 +202,7 @@ p1.mut.wt.pca = deg_pca(p1.mut.wt.results[["deseq_object"]], "pca_diff-expressio
 # p1.mut.wt.pca
 ```
 
-The main difference is not between the conditions, but between on WT sample and the other three samples, which explains the minute number of differentially expressed genes.
+The main difference is not between the conditions, but between one WT sample and the other three samples, which explains the small number of differentially expressed genes.
 
 2) Find differentially expressed genes in p1 in D11-WT vs D7-WT:
 
@@ -263,22 +263,39 @@ p1.11.7.norm.counts %>%
 
 Exactly as expected, Nfia is significantly upregulated.
 
-3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the p1-specific set of reference genes: a reference gene should be significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7:
+3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the p1-specific set of reference genes. A reference gene should be:
+
+a) either significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7,
+
+b) or significantly upregulated in MUT-D11 vs WT-D11 but significantly downregulated in WT-D11 vs WT-D7:
 
 ```{r, include=T}
-p1.degs.mut.wt = as.data.frame(p1.mut.wt.res) %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0) %>%
-  pull(gene_name)
-
-p1.degs.11.7 = as.data.frame(p1.11.7.res) %>%
+p1.degs.mut.wt.up = as.data.frame(p1.mut.wt.res) %>%
   rownames_to_column(var = "gene_name") %>%
   filter(padj < fdr) %>%
   filter(log2FoldChange > 0) %>%
   pull(gene_name)
 
-p1.ref.genes = intersect(p1.degs.mut.wt, p1.degs.11.7)
+p1.degs.mut.wt.down = as.data.frame(p1.mut.wt.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+p1.degs.11.7.up = as.data.frame(p1.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0) %>%
+  pull(gene_name)
+
+p1.degs.11.7.down = as.data.frame(p1.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+p1.ref.genes = union(intersect(p1.degs.mut.wt.down, p1.degs.11.7.up),
+                     intersect(p1.degs.mut.wt.up, p1.degs.11.7.down))
 
 cat("Number of p1 reference genes:", length(p1.ref.genes), "\n")
 
@@ -380,22 +397,39 @@ p2.11.7.norm.counts %>%
 
 Exactly as expected, Nfia is significantly upregulated. 
 
-3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the p2-specific set of reference genes: a reference gene should be significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7:
+3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the p2-specific set of reference genes. A reference gene should be:
+
+a) either significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7,
+
+b) or significantly upregulated in MUT-D11 vs WT-D11 but significantly downregulated in WT-D11 vs WT-D7:
 
 ```{r, include=T}
-p2.degs.mut.wt = as.data.frame(p2.mut.wt.res) %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0) %>%
-  pull(gene_name)
-
-p2.degs.11.7 = as.data.frame(p2.11.7.res) %>%
+p2.degs.mut.wt.up = as.data.frame(p2.mut.wt.res) %>%
   rownames_to_column(var = "gene_name") %>%
   filter(padj < fdr) %>%
   filter(log2FoldChange > 0) %>%
   pull(gene_name)
 
-p2.ref.genes = intersect(p2.degs.mut.wt, p2.degs.11.7)
+p2.degs.mut.wt.down = as.data.frame(p2.mut.wt.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+p2.degs.11.7.up = as.data.frame(p2.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0) %>%
+  pull(gene_name)
+
+p2.degs.11.7.down = as.data.frame(p2.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+p2.ref.genes = union(intersect(p2.degs.mut.wt.down, p2.degs.11.7.up),
+                     intersect(p2.degs.mut.wt.up, p2.degs.11.7.down))
 
 cat("Number of p2 reference genes:", length(p2.ref.genes), "\n")
 
@@ -500,19 +534,32 @@ Exactly as expected, Nfia is significantly upregulated.
 3) Intersect the set of DEGs from MUT-D11 vs WT-D11 with the set of DEGs from WT-D11 vs WT-D7 to obtain the pMN-specific set of reference genes: a reference gene should be significantly downregulated in MUT-D11 vs WT-D11 but significantly upregulated in WT-D11 vs WT-D7:
 
 ```{r, include=T}
-pM.degs.mut.wt = as.data.frame(pM.mut.wt.res) %>%
-  rownames_to_column(var = "gene_name") %>%
-  filter(padj < fdr) %>%
-  filter(log2FoldChange < 0) %>%
-  pull(gene_name)
-
-pM.degs.11.7 = as.data.frame(pM.11.7.res) %>%
+pM.degs.mut.wt.up = as.data.frame(pM.mut.wt.res) %>%
   rownames_to_column(var = "gene_name") %>%
   filter(padj < fdr) %>%
   filter(log2FoldChange > 0) %>%
   pull(gene_name)
 
-pM.ref.genes = intersect(pM.degs.mut.wt, pM.degs.11.7)
+pM.degs.mut.wt.down = as.data.frame(pM.mut.wt.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+pM.degs.11.7.up = as.data.frame(pM.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange > 0) %>%
+  pull(gene_name)
+
+pM.degs.11.7.down = as.data.frame(pM.11.7.res) %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(padj < fdr) %>%
+  filter(log2FoldChange < 0) %>%
+  pull(gene_name)
+
+pM.ref.genes = union(intersect(pM.degs.mut.wt.down, pM.degs.11.7.up),
+                     intersect(pM.degs.mut.wt.up, pM.degs.11.7.down))
 
 cat("Number of pM reference genes:", length(pM.ref.genes), "\n")
 

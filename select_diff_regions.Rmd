@@ -15,6 +15,7 @@ dyn.load("/home/rstudio/libs/libgslcblas.so.0")
 library(TFBSTools)
 library(tibble)
 library(Biostrings)
+library(rtracklayer)
 ```
 
 Set significance parameters:
@@ -27,6 +28,14 @@ fdr = 0.01
 min.l2fc = 2 # Min log2(fold change)
 min.baseMean = 100
 
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 0
+
+# fdr = 0.01
+# min.l2fc = 0 # Min log2(fold change)
+# min.baseMean = 0
+
 # fdr = 0.05
 # min.l2fc = 0 # Min log2(fold change)
 # min.baseMean = 0
@@ -35,34 +44,20 @@ min.baseMean = 100
 Define a general function for generating BED files of NFIA-dependent regions:
 
 ```{r, include=T}
-select.dep.regions = function(p.11.7.dep, count.table, bed.filename) {
-  bed.content = count.table %>%
+select.dep.regions = function(p.11.7.dep, count.table) {
+  dep.annot = count.table %>%
     dplyr::select(Geneid,
                   Chr,
                   Start,
                   End,
                   Strand) %>%
-    mutate(Score = 0) %>%
-    dplyr::select(Chr,
-                  Start,
-                  End,
-                  Geneid,
-                  Score,
-                  Strand) %>%
     filter(Geneid %in% p.11.7.dep)
 
-  write.table(bed.content,
-              file = bed.filename,
-              sep = "\t",
-              quote = F,
-              row.names = F,
-              col.names = F)
-  
-  return(GRanges(seqnames = bed.content$Chr,
-                 ranges = IRanges(start = bed.content$Start,
-                                  end = bed.content$End,
-                                  names = bed.content$Geneid),
-                 strand = strand(bed.content$Strand)))
+  return(GRanges(seqnames = dep.annot$Chr,
+                 ranges = IRanges(start = dep.annot$Start,
+                                  end = dep.annot$End,
+                                  names = dep.annot$Geneid),
+                 strand = strand(dep.annot$Strand)))
 }
 ```
 
@@ -132,17 +127,11 @@ pM = read.delim("../results/select_samples/featureCounts_WT_D7_pM_vs_WT_D11_pM.t
 
 names(pM) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(pM))
 
-p1.dep.ranges = select.dep.regions(p1.11.7.dep, p1, 
-                                   paste0("../r_results/select_diff_regions/p1_D11_vs_D7_dep", 
-                                          "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,".bed"))
+p1.dep.ranges = select.dep.regions(p1.11.7.dep, p1)
 
-p2.dep.ranges = select.dep.regions(p2.11.7.dep, p2, 
-                                   paste0("../r_results/select_diff_regions/p2_D11_vs_D7_dep", 
-                                          "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,".bed"))
+p2.dep.ranges = select.dep.regions(p2.11.7.dep, p2)
 
-pM.dep.ranges = select.dep.regions(pM.11.7.dep, pM, 
-                                   paste0("../r_results/select_diff_regions/pM_D11_vs_D7_dep", 
-                                          "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,".bed"))
+pM.dep.ranges = select.dep.regions(pM.11.7.dep, pM)
 ```
 
 ## Scan NFIA-dependent regions for the NFIA motif
@@ -238,20 +227,37 @@ Select NFIA-dependent regions with NFIA matches:
 ```{r, include=T}
 p1.dep.nfia.ranges = p1.dep.ranges[p1.dep.ranges@ranges@NAMES %in% p1.matched.regions]
 
+p1.dep.nfia.ranges.filename = paste0("../r_results/select_diff_regions/", 
+                                     "p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                     "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean)
+
 saveRDS(p1.dep.nfia.ranges, 
-        file = paste0("../r_results/select_diff_regions/", 
-                      "p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
-                      "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+        file = paste0(p1.dep.nfia.ranges.filename, ".rds"))
+
+export(p1.dep.nfia.ranges,
+       paste0(p1.dep.nfia.ranges.filename, ".bed"))
 
 p2.dep.nfia.ranges = p2.dep.ranges[p2.dep.ranges@ranges@NAMES %in% p2.matched.regions]
 
-saveRDS(p2.dep.nfia.ranges, file = paste0("../r_results/select_diff_regions/", 
-                      "p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
-                      "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+p2.dep.nfia.ranges.filename = paste0("../r_results/select_diff_regions/", 
+                                     "p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                     "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean)
+
+saveRDS(p2.dep.nfia.ranges, 
+        file = paste0(p2.dep.nfia.ranges.filename, ".rds"))
+
+export(p2.dep.nfia.ranges,
+       paste0(p2.dep.nfia.ranges.filename, ".bed"))
 
 pM.dep.nfia.ranges = pM.dep.ranges[pM.dep.ranges@ranges@NAMES %in% pM.matched.regions]
 
-saveRDS(pM.dep.nfia.ranges, file = paste0("../r_results/select_diff_regions/", 
-                      "pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
-                      "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+pM.dep.nfia.ranges.filename = paste0("../r_results/select_diff_regions/", 
+                                     "pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                     "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean)
+
+saveRDS(pM.dep.nfia.ranges, 
+        file = paste0(pM.dep.nfia.ranges.filename, ".rds"))
+
+export(pM.dep.nfia.ranges,
+       paste0(pM.dep.nfia.ranges.filename, ".bed"))
 ```
