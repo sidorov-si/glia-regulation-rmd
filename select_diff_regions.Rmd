@@ -129,9 +129,24 @@ names(pM) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(pM))
 
 p1.dep.ranges = select.dep.regions(p1.11.7.dep, p1)
 
+export(p1.dep.ranges,
+       paste0("../r_results/select_diff_regions/p1_dep_ranges", 
+              "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+              ".bed"))
+
 p2.dep.ranges = select.dep.regions(p2.11.7.dep, p2)
 
+export(p2.dep.ranges,
+       paste0("../r_results/select_diff_regions/p2_dep_ranges", 
+              "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+              ".bed"))
+
 pM.dep.ranges = select.dep.regions(pM.11.7.dep, pM)
+
+export(pM.dep.ranges,
+       paste0("../r_results/select_diff_regions/pM_dep_ranges", 
+              "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+              ".bed"))
 ```
 
 ## Scan NFIA-dependent regions for the NFIA motif
