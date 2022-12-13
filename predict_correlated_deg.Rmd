@@ -58,6 +58,23 @@ generate_tss = function(tx.ranges, tss.bed.filename) {
 }
 ```
 
+Define a function to generate the TSS annotation of the NFIA-dependent genes:
+
+```{r, include=T}
+generate_tss_annot = function(p.dep.genes, p.dep.tss.filename) {
+  p.dep.genes.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p.dep.genes, ]
+  
+  p.dep.genes.ranges = GRanges(seqnames = p.dep.genes.annot$chr,
+                               ranges = IRanges(start = p.dep.genes.annot$start,
+                                                end   = p.dep.genes.annot$stop,
+                                                names = p.dep.genes.annot$tx_name),
+                               strand = strand(p.dep.genes.annot$strand),
+                               gene_name = p.dep.genes.annot$gene_name)
+  
+  p.dep.tss.ranges = generate_tss(p.dep.genes.ranges, p.dep.tss.filename)
+}
+```
+
 Load the master table:
 
 ```{r, include=T}
@@ -200,6 +217,28 @@ pM.dep.regions = import(paste0("../r_results/select_diff_regions/pM_dep_ranges",
                                ".bed"))
 ```
 
+Upload the genome annotation for mm10 that was used for the expression quantification analysis:
+
+```{r, include=T}
+# These are actually transcripts, not genes, but I retained the name "genes" 
+# to track the provenance of this BED from the original gene.bed used in 
+# expression quantification with the nf-core rnaseq pipeline (gene.bed also 
+# contains transcripts, not genes).
+mm10.tx = read.delim(file = "../results/genes_bed6.bed",
+                     header = F)
+
+names(mm10.tx) = c("chr", "start", "stop", "tx_name", "score", "strand")
+
+mm10.gene2tx = read.delim(file = "../results/mm10_genes_to_transcripts.tsv",
+                          header = F)
+
+names(mm10.gene2tx) = c("gene_name", "tx_name")
+
+mm10.annot.genes = mm10.tx %>%
+  left_join(mm10.gene2tx,
+            by = c("tx_name" = "tx_name"))
+```
+
 Upload sets of NFIA-dependent genes:
 
 ```{r, include=T}
@@ -208,6 +247,29 @@ p1.dep.genes = readRDS(file = "../r_results/diff_expression/tables/p1_ref_genes.
 p2.dep.genes = readRDS(file = "../r_results/diff_expression/tables/p2_ref_genes.rds")
 
 pM.dep.genes = readRDS(file = "../r_results/diff_expression/tables/pM_ref_genes.rds")
+```
+
+Check that all NFIA-dependent genes are present in the genome annotation:
+
+```{r, include=T}
+cat("Number of p1 NFIA-dependent genes absent from the annotation:", length(p1.dep.genes) - sum(p1.dep.genes %in% mm10.annot.genes$gene_name), "\n")
+
+cat("Number of p2 NFIA-dependent genes absent from the annotation:", length(p2.dep.genes) - sum(p2.dep.genes %in% mm10.annot.genes$gene_name), "\n")
+
+cat("Number of pM NFIA-dependent genes absent from the annotation:", length(pM.dep.genes) - sum(pM.dep.genes %in% mm10.annot.genes$gene_name), "\n")
+```
+
+Generate genomic ranges for the NFIA-dependent genes:
+
+```{r, include=T}
+p1.dep.tss.ranges = generate_tss_annot(p1.dep.genes,
+                                       "../r_results/predict_correlated_deg/p1_dep_genes_tss.bed")
+
+p2.dep.tss.ranges = generate_tss_annot(p2.dep.genes,
+                                       "../r_results/predict_correlated_deg/p2_dep_genes_tss.bed")
+
+pM.dep.tss.ranges = generate_tss_annot(pM.dep.genes,
+                                       "../r_results/predict_correlated_deg/pM_dep_genes_tss.bed")
 ```
 
 
