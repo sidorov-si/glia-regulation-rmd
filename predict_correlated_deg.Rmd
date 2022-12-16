@@ -72,6 +72,259 @@ generate_tss_annot = function(p.dep.genes, p.dep.tss.filename) {
                                gene_name = p.dep.genes.annot$gene_name)
   
   p.dep.tss.ranges = generate_tss(p.dep.genes.ranges, p.dep.tss.filename)
+  
+  return(p.dep.tss.ranges)
+}
+```
+
+Define a function to generate the region-gene assignment area around a region as a vicinity of a fixed radius (in kbp):
+
+```{r, include=T}
+generate_vicinity_radius = function(dep.regions, vicinity.radius, vicinity.ranges.bed.filename) {
+  vicinity.radius = vicinity.radius * 1000
+  
+  dep.regions.df = as.data.frame(dep.regions) %>%
+    mutate(seqnames = as.character(seqnames)) %>%
+    mutate(strand = as.character(strand)) %>%
+    rowwise() %>%
+    mutate(., max_position = mm10.chr.sizes[seqnames] - 1) %>%
+    ungroup()
+  
+  vicinity.ranges = GRanges(seqnames = dep.regions.df$seqnames,
+                            ranges = IRanges(start = ifelse(dep.regions.df$start - vicinity.radius > 0,
+                                                            dep.regions.df$start - vicinity.radius,
+                                                            1),
+                                             end = ifelse(dep.regions.df$end + vicinity.radius < dep.regions.df$max_position,
+                                                          dep.regions.df$end + vicinity.radius,
+                                                          dep.regions.df$max_position),
+                                             names = dep.regions.df$name),
+                            strand = Rle(strand("*")))
+
+  export(vicinity.ranges, vicinity.ranges.bed.filename)
+
+  return(vicinity.ranges)
+}
+```
+
+Define a function to generate the region-gene assignment area around a region as the largest size-selected TAD that contains the region (TAD size limits are in kbp):
+
+```{r, include=T}
+set_null_names = function(gr) {
+  names(gr) = NULL
+  return(gr)
+}
+
+generate_vicinity_tad = function(min.tad.size, max.tad.size, dep.regions, domain.name, vicinity.ranges.bed.filename) {
+  tads.size.selected = tads[end(ranges(tads)) - start(ranges(tads)) >= min.tad.size * 1000 & 
+                            end(ranges(tads)) - start(ranges(tads)) <= max.tad.size * 1000]
+  
+  export(tads.size.selected,
+         paste0("../r_results/predict_correlated_deg/tads_size_selected_", 
+                min.tad.size, "-", max.tad.size, "kbp.bed"))
+  
+  dep.regions.in.selected.tads.res = GenomicRanges::findOverlaps(query = dep.regions, 
+                                                                 subject = tads.size.selected,
+                                                                 type = "within",
+                                                                 select = "all",
+                                                                 ignore.strand = T)
+  
+  dep.regions.hits = data.frame(region.row.nums = queryHits(dep.regions.in.selected.tads.res)) %>%
+    left_join(as.data.frame(dep.regions) %>%
+                rownames_to_column(var = "region.row.nums") %>%
+                mutate(region.row.nums = as.integer(region.row.nums)),
+              by = c("region.row.nums" = "region.row.nums")) %>%
+    dplyr::select(name)
+  
+  tads.hits = data.frame(tad.row.nums = subjectHits(dep.regions.in.selected.tads.res)) %>%
+    left_join(as.data.frame(tads.size.selected) %>%
+                rownames_to_column(var = "tad.row.nums") %>%
+                mutate(tad.row.nums = as.integer(tad.row.nums)),
+              by = c("tad.row.nums" = "tad.row.nums")) %>%
+    dplyr::rename(tad_width = width)
+  
+  regions.in.tads.final = dep.regions.hits %>%
+    bind_cols(tads.hits) %>%
+    group_by(name) %>%
+    mutate(is_max = (tad_width == max(tad_width))) %>%
+    ungroup() %>%
+    filter(is_max) %>%
+    group_by(name) %>%
+    slice(1) %>% # retain only the first largest TAD per region
+    ungroup() %>%
+    dplyr::select(name,
+                  seqnames,
+                  start,
+                  end) %>%
+    dplyr::rename(region = name,
+                  vicinity_start = start,
+                  vicinity_end = end)
+  
+  cat("nrow(regions.in.tads.final) =", nrow(regions.in.tads.final), "\n")
+  
+  regions.in.tads.final.ranges = GRanges(seqnames = regions.in.tads.final$seqnames,
+                                         ranges = IRanges(start = regions.in.tads.final$vicinity_start,
+                                                          end = regions.in.tads.final$vicinity_end,
+                                                          names = regions.in.tads.final$region),
+                                         strand = Rle(strand("*")))
+  
+  export(regions.in.tads.final.ranges, vicinity.ranges.bed.filename)
+  
+  tads.matched = as.data.frame(set_null_names(regions.in.tads.final.ranges)) %>%
+    mutate(seqnames = as.character(seqnames)) %>%
+    dplyr::select(seqnames, start, end) %>%
+    arrange(seqnames, start, end) %>%
+    distinct()
+  
+  tads.matched.ranges = GRanges(seqnames = tads.matched$seqnames,
+                                ranges = IRanges(start = tads.matched$start,
+                                                 end = tads.matched$end),
+                                strand = Rle(strand("*")))
+  
+  export(tads.matched.ranges,
+         paste0("../r_results/predict_correlated_deg/tads_matched_", domain.name, "_",
+               min.tad.size, "-", max.tad.size, "kbp_by_dep_regions_fdr", 
+               fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".bed"))
+  
+  cat(domain.name, ":\n")
+  
+  cat("Number of NFIA-dependent regions in TADs:", length(unique(regions.in.tads.final$region)), 
+      "(", length(unique(regions.in.tads.final$region)) / length(dep.regions) * 100, "% )\n")
+  
+  cat("Number of max-length TADs with at least one NFIA-dependent region:", (regions.in.tads.final %>% dplyr::select(seqnames, vicinity_start, vicinity_end) %>% distinct() %>% nrow()),
+      "(", (regions.in.tads.final %>% dplyr::select(seqnames, vicinity_start, vicinity_end) %>% distinct() %>% nrow()) / length(tads.size.selected) * 100, "% of all size-selected TADs)\n")
+  
+  cat("Number of NFIA-dependent regions per TAD:", length(unique(regions.in.tads.final$region)) / (regions.in.tads.final %>% dplyr::select(seqnames, vicinity_start, vicinity_end) %>% distinct() %>% nrow()), "\n")
+  
+  cat("---\n")
+  
+  return(regions.in.tads.final.ranges)
+}
+```
+
+Define a function to predict NFIA-dependent region - NFIA-dependent gene regulatory associations:
+
+```{r, include=T}
+add_gene_suffix = function(column.names) {
+  return(paste0(column.names, "_gene"))
+}
+
+add_region_suffix = function(column.names) {
+  return(paste0(column.names, "_region"))
+}
+
+find_background_pairs = function(dep.tss, vicinity.gr) {
+  dep.tss.df = as.data.frame(dep.tss) %>%
+    rownames_to_column(var = "tx_id") %>%
+    rownames_to_column(var = "tss_num") %>% 
+    dplyr::select(tss_num,
+                  seqnames, 
+                  gene_name)
+  
+  vicinity.df = as.data.frame(vicinity.gr) %>%
+    rownames_to_column(var = "region_name") %>%
+    rownames_to_column(var = "region_num") %>% 
+    dplyr::select(region_num,
+                  seqnames,
+                  region_name)
+  
+  dep.tss.chrs = as.character(unique(sort(dep.tss.df$seqnames)))
+  
+  chr.corresp.df = bind_rows(lapply(dep.tss.chrs,
+                                    function(chr) {
+                                      vicinity.df %>%
+                                        filter(seqnames != chr) %>%
+                                        mutate(chr = chr) %>%
+                                        dplyr::select(chr,
+                                                      region_num)
+                                    }))
+  
+  hits.df = dep.tss.df %>%
+    left_join(chr.corresp.df,
+              by = c("seqnames" = "chr"))
+  
+  hits = Hits(from = as.integer(hits.df$tss_num),
+              to = as.integer(hits.df$region_num),
+              nLnode = nrow(dep.tss.df),
+              nRnode = nrow(vicinity.df))  
+}
+
+calc_correlations = function(vicinity.gr, dep.tss, 
+                             norm.region.counts, norm.gene.counts, 
+                             region.sample.names, gene.sample.names, 
+                             domain.name, calc.mode, corr.rds.filename) {
+  region.tss.shared.sample.names = intersect(region.sample.names, gene.sample.names)
+  
+  if (calc.mode == "target") {
+    tss.vicinity.hits = GenomicRanges::findOverlaps(query = dep.tss, 
+                                                    subject = vicinity.gr,
+                                                    type = "within",
+                                                    select = "all",
+                                                    ignore.strand = T)
+  } else if (calc.mode == "background") {
+    tss.vicinity.hits = find_background_pairs(dep.tss, 
+                                              vicinity.gr)
+  }
+
+  tss.hits = data.frame(tss_num = queryHits(tss.vicinity.hits)) %>%
+    left_join(as.data.frame(dep.tss) %>%
+                rownames_to_column(var = "tss_id") %>%
+                rownames_to_column(var = "tss_num") %>%
+                mutate(tss_num = as.integer(tss_num)) %>%
+                dplyr::select(tss_num,
+                              gene_name),
+              by = c("tss_num" = "tss_num")) %>% 
+    left_join(norm.gene.counts,
+              by = c("gene_name" = "gene_names")) %>%
+    dplyr::select(tss_num,
+                  gene_name,
+                  all_of(sort(names(.)[names(.) %in% region.tss.shared.sample.names]))) %>%
+    dplyr::rename_with(add_gene_suffix, all_of(region.tss.shared.sample.names))
+  
+  vicinity.hits = data.frame(vicinity_num = subjectHits(tss.vicinity.hits)) %>%
+    left_join(as.data.frame(vicinity.gr) %>%
+                rownames_to_column(var = "region_id") %>%
+                rownames_to_column(var = "vicinity_num") %>%
+                mutate(vicinity_num = as.integer(vicinity_num)) %>%
+                dplyr::select(vicinity_num,
+                              region_id),
+              by = c("vicinity_num" = "vicinity_num")) %>% 
+    left_join(norm.region.counts,
+              by = c("region_id" = "region_names")) %>% 
+    dplyr::select(vicinity_num,
+                  region_id,
+                  all_of(sort(names(.)[names(.) %in% region.tss.shared.sample.names]))) %>%
+    dplyr::rename_with(add_region_suffix, all_of(region.tss.shared.sample.names))
+  
+  vicinity.tss.corr = vicinity.hits %>%
+    bind_cols(tss.hits) %>%
+    dplyr::select(-vicinity_num,
+                  -tss_num) %>%
+    distinct() %>%
+    rowwise() %>% 
+    mutate(pcc = cor(x = c_across(ends_with("_region")),
+                     y = c_across(ends_with("_gene")),
+                     method = "pearson")) %>% 
+    ungroup()
+  
+  vicinity.tss.corr.final = vicinity.tss.corr %>%
+    dplyr::select(region_id,
+                  gene_name,
+                  pcc) %>%
+    mutate(pcc = abs(pcc))
+  
+  cat(domain.name, "\n")
+  
+  cat("Number of region-gene associations:", nrow(vicinity.tss.corr.final), "\n")
+  
+  cat("Number of unique regions          :", length(unique(vicinity.tss.corr.final$region_id)), "\n")
+  
+  cat("Number of unique genes            :", length(unique(vicinity.tss.corr.final$gene_name)), "\n")
+  
+  cat("---\n")
+  
+  saveRDS(vicinity.tss.corr.final, corr.rds.filename)
+  
+  return(vicinity.tss.corr.final)
 }
 ```
 
@@ -79,6 +332,8 @@ Load the master table:
 
 ```{r, include=T}
 master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts
+
+gene.names = rownames(master.table)
 ```
 
 Normalise gene expression across replicates using DESeq2:
@@ -86,44 +341,56 @@ Normalise gene expression across replicates using DESeq2:
 ```{r, include=T}
 # p1
 
+p1.gene.sample.names = unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p1.*"))
+
 p1.raw.counts = master.table %>%
-  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p1.*"))))
+  dplyr::select(all_of(p1.gene.sample.names))
 
 p1.cond = data.frame(condition = stringr::str_extract(names(p1.raw.counts), "D(7|9|11)"))
 
 p1.diff.levels = c("D7", "D9", "D11")
 
-p1.norm.counts = normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)
+p1.norm.gene.counts = as.data.frame(normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)) %>%
+  mutate(gene_names = gene.names) %>%
+  dplyr::select(gene_names, all_of(names(.)[names(.) != "gene_names"]))
 
-saveRDS(p1.norm.counts,
+saveRDS(p1.norm.gene.counts,
         file = "../r_results/predict_correlated_deg/p1_norm_counts_expression.rds")
 
 # p2
 
+p2.gene.sample.names = unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p2.*"))
+
 p2.raw.counts = master.table %>%
-  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p2.*"))))
+  dplyr::select(all_of(p2.gene.sample.names))
 
 p2.cond = data.frame(condition = stringr::str_extract(names(p2.raw.counts), "D(7|9|11)"))
 
 p2.diff.levels = c("D7", "D9", "D11")
 
-p2.norm.counts = normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)
+p2.norm.gene.counts = as.data.frame(normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)) %>%
+  mutate(gene_names = gene.names) %>%
+  dplyr::select(gene_names, all_of(names(.)[names(.) != "gene_names"]))
 
-saveRDS(p2.norm.counts,
+saveRDS(p2.norm.gene.counts,
         file = "../r_results/predict_correlated_deg/p2_norm_counts_expression.rds")
 
 # pMN
 
+pM.gene.sample.names = unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_pM.*"))
+
 pM.raw.counts = master.table %>%
-  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_pM.*"))))
+  dplyr::select(all_of(pM.gene.sample.names))
 
 pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7|9|11)"))
 
 pM.diff.levels = c("D7", "D9", "D11")
 
-pM.norm.counts = normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)
+pM.norm.gene.counts = as.data.frame(normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)) %>%
+  mutate(gene_names = gene.names) %>%
+  dplyr::select(gene_names, all_of(names(.)[names(.) != "gene_names"]))
 
-saveRDS(pM.norm.counts,
+saveRDS(pM.norm.gene.counts,
         file = "../r_results/predict_correlated_deg/pM_norm_counts_expression.rds")
 ```
 
@@ -142,6 +409,14 @@ master.table = read.delim(file = "../input/consensus_peaks.mRp.clN.featureCounts
                           skip = 1)
 
 names(master.table) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(master.table))
+
+region.annot = master.table %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand,
+                Length)
 ```
 
 Normalise chromatin accessibility across replicates using DESeq2:
@@ -149,44 +424,56 @@ Normalise chromatin accessibility across replicates using DESeq2:
 ```{r, include=T}
 # p1
 
+p1.region.sample.names = unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p1.*"))
+
 p1.raw.counts = master.table %>%
-  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p1.*"))))
+  dplyr::select(all_of(p1.region.sample.names))
 
 p1.cond = data.frame(condition = stringr::str_extract(names(p1.raw.counts), "D(7|9|11)"))
 
 p1.diff.levels = c("D7", "D9", "D11")
 
-p1.norm.counts = normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)
+p1.norm.region.counts = as.data.frame(normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)) %>%
+  mutate(region_names = region.annot$Geneid) %>%
+  dplyr::select(region_names, all_of(names(.)[names(.) != "region_names"]))
 
-saveRDS(p1.norm.counts,
+saveRDS(p1.norm.region.counts,
         file = "../r_results/predict_correlated_deg/p1_norm_counts_accessibility.rds")
 
 # p2
 
+p2.region.sample.names = unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p2.*"))
+
 p2.raw.counts = master.table %>%
-  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_p2.*"))))
+  dplyr::select(all_of(p2.region.sample.names))
 
 p2.cond = data.frame(condition = stringr::str_extract(names(p2.raw.counts), "D(7|9|11)"))
 
 p2.diff.levels = c("D7", "D9", "D11")
 
-p2.norm.counts = normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)
+p2.norm.region.counts = as.data.frame(normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)) %>%
+  mutate(region_names = region.annot$Geneid) %>%
+  dplyr::select(region_names, all_of(names(.)[names(.) != "region_names"]))
 
-saveRDS(p2.norm.counts,
+saveRDS(p2.norm.region.counts,
         file = "../r_results/predict_correlated_deg/p2_norm_counts_accessibility.rds")
 
 # pMN
 
+pM.region.sample.names = unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_pM.*"))
+
 pM.raw.counts = master.table %>%
-  dplyr::select(all_of(unlist(stringr::str_match_all(names(master.table), "WT_D[179]+_pM.*"))))
+  dplyr::select(all_of(pM.region.sample.names))
 
 pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7|9|11)"))
 
 pM.diff.levels = c("D7", "D9", "D11")
 
-pM.norm.counts = normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)
+pM.norm.region.counts = as.data.frame(normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)) %>%
+  mutate(region_names = region.annot$Geneid) %>%
+  dplyr::select(region_names, all_of(names(.)[names(.) != "region_names"]))
 
-saveRDS(pM.norm.counts,
+saveRDS(pM.norm.region.counts,
         file = "../r_results/predict_correlated_deg/pM_norm_counts_accessibility.rds")
 ```
 
@@ -259,7 +546,7 @@ cat("Number of p2 NFIA-dependent genes absent from the annotation:", length(p2.d
 cat("Number of pM NFIA-dependent genes absent from the annotation:", length(pM.dep.genes) - sum(pM.dep.genes %in% mm10.annot.genes$gene_name), "\n")
 ```
 
-Generate genomic ranges for the NFIA-dependent genes:
+Generate genomic ranges for the TSSs of the NFIA-dependent genes:
 
 ```{r, include=T}
 p1.dep.tss.ranges = generate_tss_annot(p1.dep.genes,
@@ -272,5 +559,171 @@ pM.dep.tss.ranges = generate_tss_annot(pM.dep.genes,
                                        "../r_results/predict_correlated_deg/pM_dep_genes_tss.bed")
 ```
 
+Upload mm10 chromosome sizes:
 
+```{r, include=T}
+mm10.chr.sizes.df = read.delim(file = "../input/mm10.chrom.sizes",
+                               header = F,
+                               sep = "\t")
+
+mm10.chr.sizes = mm10.chr.sizes.df$V2
+
+names(mm10.chr.sizes) = mm10.chr.sizes.df$V1
+```
+
+Generate the region-gene assignment areas as vicinities of a fixed radius around the NFIA-dependent regions:
+
+```{r, include=T}
+vicinity.radius = 500 # kbp
+
+p1.vicinity.radius = generate_vicinity_radius(p1.dep.regions, 
+                                              vicinity.radius,
+                                              paste0("../r_results/predict_correlated_deg/p1_vicinities_radius_", 
+                                                     vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                     "_min-baseMean", min.baseMean, ".bed"))
+
+p2.vicinity.radius = generate_vicinity_radius(p2.dep.regions, 
+                                              vicinity.radius,
+                                              paste0("../r_results/predict_correlated_deg/p2_vicinities_radius_", 
+                                                     vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                     "_min-baseMean", min.baseMean, ".bed"))
+
+pM.vicinity.radius = generate_vicinity_radius(pM.dep.regions, 
+                                              vicinity.radius,
+                                              paste0("../r_results/predict_correlated_deg/pM_vicinities_radius_", 
+                                                     vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                     "_min-baseMean", min.baseMean, ".bed"))
+```
+
+Upload the hierarchical TAD annotation:
+
+```{r, include=T}
+tads = import("../input/10_selected_tads_no-emply-line.bed")
+```
+
+Assign the largest size-selected TAD to each NFIA-dependent region as its region-gene assignment area:
+
+```{r, include=T}
+min.tad.size = 500 # kbp
+
+max.tad.size = 1500 # kbp
+
+p1.vicinity.tad = generate_vicinity_tad(min.tad.size,
+                                        max.tad.size,
+                                        p1.dep.regions,
+                                        "p1",
+                                        paste0("../r_results/predict_correlated_deg/p1_vicinities_largest_tad_", 
+                                               min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                               "_min-baseMean", min.baseMean, ".bed"))
+
+p2.vicinity.tad = generate_vicinity_tad(min.tad.size,
+                                        max.tad.size,
+                                        p2.dep.regions,
+                                        "p2",
+                                        paste0("../r_results/predict_correlated_deg/p2_vicinities_largest_tad_", 
+                                               min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                               "_min-baseMean", min.baseMean, ".bed"))
+
+pM.vicinity.tad = generate_vicinity_tad(min.tad.size,
+                                        max.tad.size,
+                                        pM.dep.regions,
+                                        "pM",
+                                        paste0("../r_results/predict_correlated_deg/pM_vicinities_largest_tad_", 
+                                               min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                               "_min-baseMean", min.baseMean, ".bed"))
+```
+
+Calculate Pearson correlation coefficients (PCCs) between NFIA-dependent regions and NFIA-dependent genes within the regions' assignment areas defined by a fixed radius:
+
+```{r, include=T}
+p1.corr.radius = calc_correlations(p1.vicinity.radius, p1.dep.tss.ranges, 
+                                   p1.norm.region.counts, p1.norm.gene.counts, 
+                                   p1.region.sample.names, p1.gene.sample.names, 
+                                   "p1", 
+                                   "target", 
+                                   paste0("../r_results/predict_correlated_deg/p1_corr_in_radius_", 
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+
+p2.corr.radius = calc_correlations(p2.vicinity.radius, p2.dep.tss.ranges, 
+                                   p2.norm.region.counts, p2.norm.gene.counts, 
+                                   p2.region.sample.names, p2.gene.sample.names, 
+                                   "p2", 
+                                   "target", 
+                                   paste0("../r_results/predict_correlated_deg/p2_corr_in_radius_", 
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+
+pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.dep.tss.ranges, 
+                                   pM.norm.region.counts, pM.norm.gene.counts, 
+                                   pM.region.sample.names, pM.gene.sample.names, 
+                                   "pM", 
+                                   "target", 
+                                   paste0("../r_results/predict_correlated_deg/pM_corr_in_radius_", 
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+```
+
+Calculate Pearson correlation coefficients (PCCs) between NFIA-dependent regions and NFIA-dependent genes within the regions' assignment areas defined as the largest size-selected TADs containing the regions:
+
+```{r, include=T}
+p1.corr.tad = calc_correlations(p1.vicinity.tad, p1.dep.tss.ranges, 
+                                p1.norm.region.counts, p1.norm.gene.counts, 
+                                p1.region.sample.names, p1.gene.sample.names, 
+                                "p1", 
+                                "target", 
+                                paste0("../r_results/predict_correlated_deg/p1_corr_in_largest_tad_", 
+                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                       "_min-baseMean", min.baseMean, ".rds"))
+
+p2.corr.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges, 
+                                p2.norm.region.counts, p2.norm.gene.counts, 
+                                p2.region.sample.names, p2.gene.sample.names, 
+                                "p2", 
+                                "target", 
+                                paste0("../r_results/predict_correlated_deg/p2_corr_in_largest_tad_", 
+                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                       "_min-baseMean", min.baseMean, ".rds"))
+
+pM.corr.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges, 
+                                pM.norm.region.counts, pM.norm.gene.counts, 
+                                pM.region.sample.names, pM.gene.sample.names, 
+                                "pM", 
+                                "target", 
+                                paste0("../r_results/predict_correlated_deg/pM_corr_in_largest_tad_", 
+                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                       "_min-baseMean", min.baseMean, ".rds"))
+```
+
+Generate background PCC distributions:
+
+```{r, include=T}
+p1.bkgd.radius = calc_correlations(p1.vicinity.radius, p1.dep.tss.ranges,
+                                   p1.norm.region.counts, p1.norm.gene.counts,
+                                   p1.region.sample.names, p1.gene.sample.names,
+                                   "p1",
+                                   "background",
+                                   paste0("../r_results/predict_correlated_deg/p1_bkgd_in_radius_",
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+
+# ...
+
+
+
+
+```
+
+Draw the background PCC distributions:
+
+```{r, include=T}
+ggplot(p1.bkgd.radius) +
+  geom_histogram(aes(x = pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+```
+
+```{r}
+sum(p1.bkgd.radius$pcc >= 0.9 & p1.bkgd.radius$pcc <= 1)
+```
 
