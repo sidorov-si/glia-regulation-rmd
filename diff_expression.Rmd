@@ -28,7 +28,7 @@ fdr = 0.05
 Define a general function for the differential expression analysis:
 
 ```{r, include=T}
-diff_expression = function(p, p.cond, diff.levels, de.results.rds.filename) {
+diff_expression = function(p, p.cond, diff.levels, de.dds.rds.filename, de.results.rds.filename) {
   p = round(p)
   
   row.names(p.cond) = names(p)
@@ -40,6 +40,8 @@ diff_expression = function(p, p.cond, diff.levels, de.results.rds.filename) {
                                  design = ~ condition)
   
   p.dds = DESeq(p.dds)
+  
+  saveRDS(p.dds, file = paste0("../r_results/diff_expression/tables/", de.dds.rds.filename))
   
   p.res = results(p.dds, 
                   contrast = c("condition", diff.levels[1], diff.levels[2]), 
@@ -183,7 +185,11 @@ p1.mut.wt.cond.raw = data.frame(condition = stringr::str_extract(names(p1.mut.wt
 
 diff.levels.mut.wt = c("MUT", "WT")
 
-p1.mut.wt.results = diff_expression(p1.mut.wt.raw, p1.mut.wt.cond.raw, diff.levels.mut.wt, "deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
+p1.mut.wt.results = diff_expression(p1.mut.wt.raw, 
+                                    p1.mut.wt.cond.raw, 
+                                    diff.levels.mut.wt, 
+                                    "deseq-dds_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds",
+                                    "deseq-results_p1-MUT-D11-NFIAn_vs_p1-WT-D11-NFIAp.rds")
 
 p1.mut.wt.res = p1.mut.wt.results[["results_object"]]
 ```
@@ -218,7 +224,11 @@ p1.11.7.cond.raw = data.frame(condition = stringr::str_extract(names(p1.11.7.raw
 
 diff.levels = c("D11", "D7")
 
-p1.11.7.results = diff_expression(p1.11.7.raw, p1.11.7.cond.raw, diff.levels, "deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds")
+p1.11.7.results = diff_expression(p1.11.7.raw, 
+                                  p1.11.7.cond.raw, 
+                                  diff.levels, 
+                                  "deseq-dds_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds",
+                                  "deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds")
 
 p1.11.7.res = p1.11.7.results[["results_object"]]
 ```
@@ -317,7 +327,11 @@ p2.mut.wt.cond.raw = data.frame(condition = stringr::str_extract(names(p2.mut.wt
 
 diff.levels = c("MUT", "WT")
 
-p2.mut.wt.results = diff_expression(p2.mut.wt.raw, p2.mut.wt.cond.raw, diff.levels, "deseq-results_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.rds")
+p2.mut.wt.results = diff_expression(p2.mut.wt.raw, 
+                                    p2.mut.wt.cond.raw, 
+                                    diff.levels, 
+                                    "deseq-dds_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.rds",
+                                    "deseq-results_p2-MUT-D11-NFIAn_vs_p2-WT-D11-NFIAp.rds")
 
 p2.mut.wt.res = p2.mut.wt.results[["results_object"]]
 ```
@@ -352,7 +366,11 @@ p2.11.7.cond.raw = data.frame(condition = stringr::str_extract(names(p2.11.7.raw
 
 diff.levels = c("D11", "D7")
 
-p2.11.7.results = diff_expression(p2.11.7.raw, p2.11.7.cond.raw, diff.levels, "deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds")
+p2.11.7.results = diff_expression(p2.11.7.raw, 
+                                  p2.11.7.cond.raw, 
+                                  diff.levels, 
+                                  "deseq-dds_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds",
+                                  "deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds")
 
 p2.11.7.res = p2.11.7.results[["results_object"]]
 ```
@@ -451,7 +469,11 @@ pM.mut.wt.cond.raw = data.frame(condition = stringr::str_extract(names(pM.mut.wt
 
 diff.levels = c("MUT", "WT")
 
-pM.mut.wt.results = diff_expression(pM.mut.wt.raw, pM.mut.wt.cond.raw, diff.levels, "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
+pM.mut.wt.results = diff_expression(pM.mut.wt.raw, 
+                                    pM.mut.wt.cond.raw, 
+                                    diff.levels, 
+                                    "deseq-dds_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds",
+                                    "deseq-results_pM-MUT-D11-NFIAn_vs_pM-WT-D11-NFIAp.rds")
 
 pM.mut.wt.res = pM.mut.wt.results[["results_object"]]
 ```
@@ -486,7 +508,11 @@ pM.11.7.cond.raw = data.frame(condition = stringr::str_extract(names(pM.11.7.raw
 
 diff.levels = c("D11", "D7")
 
-pM.11.7.results = diff_expression(pM.11.7.raw, pM.11.7.cond.raw, diff.levels, "deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds")
+pM.11.7.results = diff_expression(pM.11.7.raw, 
+                                  pM.11.7.cond.raw, 
+                                  diff.levels, 
+                                  "deseq-dds_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds",
+                                  "deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds")
 
 pM.11.7.res = pM.11.7.results[["results_object"]]
 ```

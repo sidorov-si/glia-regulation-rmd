@@ -15,10 +15,16 @@ library(ggplot2)
 library(stringr)
 ```
 
+Define constants:
+
+```{r, include=T}
+pcc.fdr = 0.05
+```
+
 Define a function for DESeq2 count normalisation across replicates:
 
 ```{r, include=T}
-normalize_counts = function(raw.counts, cond.table, diff.levels) {
+normalize_counts = function(raw.counts, cond.table, diff.levels, dds.filename) {
   raw.counts = round(raw.counts)
   
   row.names(cond.table) = names(raw.counts)
@@ -30,6 +36,8 @@ normalize_counts = function(raw.counts, cond.table, diff.levels) {
                                design = ~ condition)
   
   dds = DESeq(dds)
+  
+  saveRDS(dds, dds.filename)
 
   dds = estimateSizeFactors(dds)
 
@@ -245,7 +253,9 @@ find_background_pairs = function(dep.tss, vicinity.gr) {
   hits = Hits(from = as.integer(hits.df$tss_num),
               to = as.integer(hits.df$region_num),
               nLnode = nrow(dep.tss.df),
-              nRnode = nrow(vicinity.df))  
+              nRnode = nrow(vicinity.df))
+  
+  return(hits)
 }
 
 calc_correlations = function(vicinity.gr, dep.tss, 
@@ -310,7 +320,7 @@ calc_correlations = function(vicinity.gr, dep.tss,
     dplyr::select(region_id,
                   gene_name,
                   pcc) %>%
-    mutate(pcc = abs(pcc))
+    mutate(abs_pcc = abs(pcc))
   
   cat(domain.name, "\n")
   
@@ -325,6 +335,14 @@ calc_correlations = function(vicinity.gr, dep.tss,
   saveRDS(vicinity.tss.corr.final, corr.rds.filename)
   
   return(vicinity.tss.corr.final)
+}
+```
+
+Define a function to calculate empirical p-values for PCCs:
+
+```{r, include=T}
+calc_empirical_pvalue = function(abs.pcc, bkgd.df) {
+  return(nrow(bkgd.df %>% filter(abs_pcc > abs.pcc)) / nrow(bkgd.df))
 }
 ```
 
@@ -350,7 +368,8 @@ p1.cond = data.frame(condition = stringr::str_extract(names(p1.raw.counts), "D(7
 
 p1.diff.levels = c("D7", "D9", "D11")
 
-p1.norm.gene.counts = as.data.frame(normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)) %>%
+p1.norm.gene.counts = as.data.frame(normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels,
+                                                     "../r_results/predict_correlated_deg/p1_gene_dds.rds")) %>%
   mutate(gene_names = gene.names) %>%
   dplyr::select(gene_names, all_of(names(.)[names(.) != "gene_names"]))
 
@@ -368,7 +387,8 @@ p2.cond = data.frame(condition = stringr::str_extract(names(p2.raw.counts), "D(7
 
 p2.diff.levels = c("D7", "D9", "D11")
 
-p2.norm.gene.counts = as.data.frame(normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)) %>%
+p2.norm.gene.counts = as.data.frame(normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels,
+                                                     "../r_results/predict_correlated_deg/p2_gene_dds.rds")) %>%
   mutate(gene_names = gene.names) %>%
   dplyr::select(gene_names, all_of(names(.)[names(.) != "gene_names"]))
 
@@ -386,7 +406,8 @@ pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7
 
 pM.diff.levels = c("D7", "D9", "D11")
 
-pM.norm.gene.counts = as.data.frame(normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)) %>%
+pM.norm.gene.counts = as.data.frame(normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels,
+                                                     "../r_results/predict_correlated_deg/pM_gene_dds.rds")) %>%
   mutate(gene_names = gene.names) %>%
   dplyr::select(gene_names, all_of(names(.)[names(.) != "gene_names"]))
 
@@ -433,7 +454,8 @@ p1.cond = data.frame(condition = stringr::str_extract(names(p1.raw.counts), "D(7
 
 p1.diff.levels = c("D7", "D9", "D11")
 
-p1.norm.region.counts = as.data.frame(normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels)) %>%
+p1.norm.region.counts = as.data.frame(normalize_counts(p1.raw.counts, p1.cond, p1.diff.levels,
+                                                       "../r_results/predict_correlated_deg/p1_region_dds.rds")) %>%
   mutate(region_names = region.annot$Geneid) %>%
   dplyr::select(region_names, all_of(names(.)[names(.) != "region_names"]))
 
@@ -451,7 +473,8 @@ p2.cond = data.frame(condition = stringr::str_extract(names(p2.raw.counts), "D(7
 
 p2.diff.levels = c("D7", "D9", "D11")
 
-p2.norm.region.counts = as.data.frame(normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels)) %>%
+p2.norm.region.counts = as.data.frame(normalize_counts(p2.raw.counts, p2.cond, p2.diff.levels,
+                                                       "../r_results/predict_correlated_deg/p2_region_dds.rds")) %>%
   mutate(region_names = region.annot$Geneid) %>%
   dplyr::select(region_names, all_of(names(.)[names(.) != "region_names"]))
 
@@ -469,7 +492,8 @@ pM.cond = data.frame(condition = stringr::str_extract(names(pM.raw.counts), "D(7
 
 pM.diff.levels = c("D7", "D9", "D11")
 
-pM.norm.region.counts = as.data.frame(normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels)) %>%
+pM.norm.region.counts = as.data.frame(normalize_counts(pM.raw.counts, pM.cond, pM.diff.levels,
+                                                       "../r_results/predict_correlated_deg/pM_region_dds.rds")) %>%
   mutate(region_names = region.annot$Geneid) %>%
   dplyr::select(region_names, all_of(names(.)[names(.) != "region_names"]))
 
@@ -636,30 +660,30 @@ pM.vicinity.tad = generate_vicinity_tad(min.tad.size,
 Calculate Pearson correlation coefficients (PCCs) between NFIA-dependent regions and NFIA-dependent genes within the regions' assignment areas defined by a fixed radius:
 
 ```{r, include=T}
-p1.corr.radius = calc_correlations(p1.vicinity.radius, p1.dep.tss.ranges, 
-                                   p1.norm.region.counts, p1.norm.gene.counts, 
-                                   p1.region.sample.names, p1.gene.sample.names, 
-                                   "p1", 
-                                   "target", 
-                                   paste0("../r_results/predict_correlated_deg/p1_corr_in_radius_", 
+p1.corr.radius = calc_correlations(p1.vicinity.radius, p1.dep.tss.ranges,
+                                   p1.norm.region.counts, p1.norm.gene.counts,
+                                   p1.region.sample.names, p1.gene.sample.names,
+                                   "p1",
+                                   "target",
+                                   paste0("../r_results/predict_correlated_deg/p1_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
 
-p2.corr.radius = calc_correlations(p2.vicinity.radius, p2.dep.tss.ranges, 
-                                   p2.norm.region.counts, p2.norm.gene.counts, 
-                                   p2.region.sample.names, p2.gene.sample.names, 
-                                   "p2", 
-                                   "target", 
-                                   paste0("../r_results/predict_correlated_deg/p2_corr_in_radius_", 
+p2.corr.radius = calc_correlations(p2.vicinity.radius, p2.dep.tss.ranges,
+                                   p2.norm.region.counts, p2.norm.gene.counts,
+                                   p2.region.sample.names, p2.gene.sample.names,
+                                   "p2",
+                                   "target",
+                                   paste0("../r_results/predict_correlated_deg/p2_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
 
-pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.dep.tss.ranges, 
-                                   pM.norm.region.counts, pM.norm.gene.counts, 
-                                   pM.region.sample.names, pM.gene.sample.names, 
-                                   "pM", 
-                                   "target", 
-                                   paste0("../r_results/predict_correlated_deg/pM_corr_in_radius_", 
+pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.dep.tss.ranges,
+                                   pM.norm.region.counts, pM.norm.gene.counts,
+                                   pM.region.sample.names, pM.gene.sample.names,
+                                   "pM",
+                                   "target",
+                                   paste0("../r_results/predict_correlated_deg/pM_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
 ```
@@ -667,30 +691,30 @@ pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.dep.tss.ranges,
 Calculate Pearson correlation coefficients (PCCs) between NFIA-dependent regions and NFIA-dependent genes within the regions' assignment areas defined as the largest size-selected TADs containing the regions:
 
 ```{r, include=T}
-p1.corr.tad = calc_correlations(p1.vicinity.tad, p1.dep.tss.ranges, 
-                                p1.norm.region.counts, p1.norm.gene.counts, 
-                                p1.region.sample.names, p1.gene.sample.names, 
-                                "p1", 
-                                "target", 
-                                paste0("../r_results/predict_correlated_deg/p1_corr_in_largest_tad_", 
+p1.corr.tad = calc_correlations(p1.vicinity.tad, p1.dep.tss.ranges,
+                                p1.norm.region.counts, p1.norm.gene.counts,
+                                p1.region.sample.names, p1.gene.sample.names,
+                                "p1",
+                                "target",
+                                paste0("../r_results/predict_correlated_deg/p1_corr_in_largest_tad_",
                                        min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                        "_min-baseMean", min.baseMean, ".rds"))
 
-p2.corr.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges, 
-                                p2.norm.region.counts, p2.norm.gene.counts, 
-                                p2.region.sample.names, p2.gene.sample.names, 
-                                "p2", 
-                                "target", 
-                                paste0("../r_results/predict_correlated_deg/p2_corr_in_largest_tad_", 
+p2.corr.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges,
+                                p2.norm.region.counts, p2.norm.gene.counts,
+                                p2.region.sample.names, p2.gene.sample.names,
+                                "p2",
+                                "target",
+                                paste0("../r_results/predict_correlated_deg/p2_corr_in_largest_tad_",
                                        min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                        "_min-baseMean", min.baseMean, ".rds"))
 
-pM.corr.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges, 
-                                pM.norm.region.counts, pM.norm.gene.counts, 
-                                pM.region.sample.names, pM.gene.sample.names, 
-                                "pM", 
-                                "target", 
-                                paste0("../r_results/predict_correlated_deg/pM_corr_in_largest_tad_", 
+pM.corr.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges,
+                                pM.norm.region.counts, pM.norm.gene.counts,
+                                pM.region.sample.names, pM.gene.sample.names,
+                                "pM",
+                                "target",
+                                paste0("../r_results/predict_correlated_deg/pM_corr_in_largest_tad_",
                                        min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                        "_min-baseMean", min.baseMean, ".rds"))
 ```
@@ -706,24 +730,337 @@ p1.bkgd.radius = calc_correlations(p1.vicinity.radius, p1.dep.tss.ranges,
                                    paste0("../r_results/predict_correlated_deg/p1_bkgd_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
-
-# ...
-
-
-
-
 ```
 
-Draw the background PCC distributions:
+Draw the background absolute PCC distribution:
 
 ```{r, include=T}
-ggplot(p1.bkgd.radius) +
+p = ggplot(p1.bkgd.radius) +
+  geom_histogram(aes(x = abs_pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_bkgd_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist.pdf"),
+       plot = p)
+```
+
+First of all, many randomly paired regions and genes are very well correlated. Secondly, there is an intriguing peak around |PCC| = 0.5 which is not readily explained.
+
+Hence, try to investigate how this peak could be formed. First, check if it is produced by the sum of positive and negative PCCs by looking at the PCC distribution:
+
+```{r, include=T}
+p = ggplot(p1.bkgd.radius) +
   geom_histogram(aes(x = pcc), 
                  binwidth = 0.05) +
   theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_bkgd_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist_orig.pdf"),
+       plot = p)
 ```
 
+The 0.5 peak is produced almost only by the positive PCCs.
+
+Check the number of significantly downregulated NFIA-dependent genes in p1, in WT-D11 vs WT-D7:
+
 ```{r}
-sum(p1.bkgd.radius$pcc >= 0.9 & p1.bkgd.radius$pcc <= 1)
+p1.ref.degs = readRDS("../r_results/diff_expression/tables/p1_ref_genes.rds")
+
+p1.all.degs = readRDS("../r_results/diff_expression/tables/deseq-results_p1-WT-D11-NFIAp_vs_p1-WT-D7-NFIAn.rds")
+
+as.data.frame(p1.all.degs) %>% 
+  rownames_to_column(var = "gene_name") %>% 
+  filter(gene_name %in% p1.ref.degs) %>% 
+  arrange(log2FoldChange) %>%
+  filter(log2FoldChange < 0)
 ```
+
+There are only three such genes. This explains the small number of negative PCCs then (3 * 577 = 1731, and the plot shows roughly this total number of negative PCCs).
+
+Simulate PCCs between 3-value vectors (representing three batches of close replicates in each vector) with the fixed first and third values:
+
+```{r, include=T}
+sim.gene.df = data.frame(a = 20, b = runif(50, min = 0, max = 150), c = 100)
+
+sim.region.df = data.frame(a = 200, b = runif(600, min = 50, max = 1500), c = 1000)
+
+simulated.pccs = c()
+
+for (i in 1:600) {
+  for (j in 1:50) {
+    simulated.pccs = c(simulated.pccs, cor(x = t(sim.region.df[i, ]),
+                                           y = t(sim.gene.df[j, ]),
+                                           method = "pearson"))
+  }
+}
+  
+p = ggplot(data.frame(pcc = simulated.pccs)) +
+  geom_histogram(aes(x = pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = "../r_results/predict_correlated_deg/plots/simulated_pcc_hist_random_day9.pdf",
+       plot = p)
+```
+
+Hence, the 0.5 peak does not emerge when "day 9" values are paired randomly. 
+
+But it may occur in a realistic scenario when the region accessibility grows faster than the gene expression that is presumably controlled via these regions (or vice versa, in a less clear scenario):
+
+```{r, include=T}
+sim.gene.df = data.frame(a = 20, b = runif(50, min = 0, max = 50), c = 100)
+
+sim.region.df = data.frame(a = 200, b = runif(600, min = 500, max = 1500), c = 1000)
+
+simulated.pccs = c()
+
+for (i in 1:600) {
+  for (j in 1:50) {
+    simulated.pccs = c(simulated.pccs, cor(x = t(sim.region.df[i, ]),
+                                           y = t(sim.gene.df[j, ]),
+                                           method = "pearson"))
+  }
+}
+  
+p = ggplot(data.frame(pcc = simulated.pccs)) +
+  geom_histogram(aes(x = pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = "../r_results/predict_correlated_deg/plots/simulated_pcc_hist_divergent_day9.pdf",
+       plot = p)
+```
+
+Indeed, this relationship between NFIA-dependent genes and regions would produce at least a part of the 0.5 peak. 
+
+Consequently, check how many region-gene pairs exhibit trends that diverge in this way at D9:
+
+```{r, include=T}
+p1.norm.region.counts.med = p1.norm.region.counts %>%
+  filter(region_names %in% names(p1.vicinity.radius)) %>%
+  dplyr::select(all_of(intersect(p1.region.sample.names, p1.gene.sample.names))) %>%
+  rowwise() %>%
+  mutate(d7_med = median(c_across(starts_with("WT_D7"))),
+         d9_med = median(c_across(starts_with("WT_D9"))),
+         d11_med = median(c_across(starts_with("WT_D11"))),
+         d9d11_ratio = d9_med / d11_med) %>%
+  ungroup()
+
+p1.norm.region.counts.up = p1.norm.region.counts.med %>%
+  filter(d9d11_ratio >= 0.5)
+
+p1.norm.region.counts.down = p1.norm.region.counts.med %>%
+  filter(d9d11_ratio < 0.5)
+
+p1.norm.gene.counts.med = p1.norm.gene.counts %>%
+  filter(gene_names %in% unique(p1.dep.tss.ranges$gene_name)) %>%
+  dplyr::select(all_of(intersect(p1.region.sample.names, p1.gene.sample.names))) %>%
+  rowwise() %>%
+  mutate(d7_med = median(c_across(starts_with("WT_D7"))),
+         d9_med = median(c_across(starts_with("WT_D9"))),
+         d11_med = median(c_across(starts_with("WT_D11"))),
+         d9d11_ratio = d9_med / d11_med) %>%
+  ungroup()
+
+p1.norm.gene.counts.up = p1.norm.gene.counts.med %>%
+  filter(d9d11_ratio >= 0.5)
+
+p1.norm.gene.counts.down = p1.norm.gene.counts.med %>%
+  filter(d9d11_ratio < 0.5)
+
+cat("nrow(p1.norm.region.counts.up) =", nrow(p1.norm.region.counts.up), "\n")
+
+cat("nrow(p1.norm.region.counts.down) =", nrow(p1.norm.region.counts.down), "\n")
+
+cat("nrow(p1.norm.gene.counts.up) =", nrow(p1.norm.gene.counts.up), "\n")
+
+cat("nrow(p1.norm.gene.counts.down) =", nrow(p1.norm.gene.counts.down), "\n")
+
+cat("Max number of region-gene pairs with PCCs around 0.5 is nrow(p1.norm.region.counts.up) * nrow(p1.norm.gene.counts.down) + nrow(p1.norm.region.counts.down) * nrow(p1.norm.gene.counts.up):", nrow(p1.norm.region.counts.up) * nrow(p1.norm.gene.counts.down) + nrow(p1.norm.region.counts.down) * nrow(p1.norm.gene.counts.up), "\n")
+```
+
+Hence, maximum 2,961 PCCs around 0.5 could be produced by region-gene trends divergent at D9, which is two times fewer than is observed: PCCs around 0.45, 0.5 and 0.55 total to about 6,000. And, importantly, these ~3,000 PCCs from divergent region-gene pairs are drawn from all possible pairs of regions and gene, while the background PCCs are drawn from a subset of region-gene pairs. Consequently, the 0.5 peak may be produced by some more complicated relationships between replicates.
+
+Calculate and plot the other two background distributions:
+
+```{r, include=T}
+p2.bkgd.radius = calc_correlations(p2.vicinity.radius, p2.dep.tss.ranges,
+                                   p2.norm.region.counts, p2.norm.gene.counts,
+                                   p2.region.sample.names, p2.gene.sample.names,
+                                   "p2",
+                                   "background",
+                                   paste0("../r_results/predict_correlated_deg/p2_bkgd_in_radius_",
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+
+pM.bkgd.radius = calc_correlations(pM.vicinity.radius, pM.dep.tss.ranges,
+                                   pM.norm.region.counts, pM.norm.gene.counts,
+                                   pM.region.sample.names, pM.gene.sample.names,
+                                   "pM",
+                                   "background",
+                                   paste0("../r_results/predict_correlated_deg/pM_bkgd_in_radius_",
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+
+p = ggplot(p2.bkgd.radius) +
+  geom_histogram(aes(x = abs_pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p2_bkgd_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist.pdf"),
+       plot = p)
+
+p = ggplot(pM.bkgd.radius) +
+  geom_histogram(aes(x = abs_pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_bkgd_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist.pdf"),
+       plot = p)
+```
+
+Interestingly, the 0.5 peak is not a universal feature of a background distribution of absolute PCCs, and a much bigger proportion of absolute PCCs is concentrated towards the highest end of the scale in p2 and pMN then in p1.
+
+Hereafter, I will use the term "PCC" for "absolute PCC."
+
+Overall, the background distributions suggest, that there will be no significant region-gene associations (because such associations would need to have extremely high PCCs), but let us check this.
+
+Calculate empirical p-values of PCCs:
+
+```{r, include=T}
+p1.corr.radius.sign = p1.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p1.bkgd.radius)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p1, radius:", nrow(p1.corr.radius.sign %>% filter(sign.padj)), "\n")
+```
+
+No significant region-gene associations.
+
+Calculate and correct p-values for PCCs in p2 and pMN:
+
+```{r, include=T}
+p2.corr.radius.sign = p2.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p2.bkgd.radius)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p2, radius:", nrow(p2.corr.radius.sign %>% filter(sign.padj)), "\n")
+
+pM.corr.radius.sign = pM.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, pM.bkgd.radius)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, radius:", nrow(pM.corr.radius.sign %>% filter(sign.padj)), "\n")
+```
+
+Calculate background PCC distributions and empirical p-values in p1, p2 and pMN when using TADs as assignment areas:
+
+```{r, include=T}
+p1.bkgd.tad = calc_correlations(p1.vicinity.tad, p1.dep.tss.ranges,
+                                p1.norm.region.counts, p1.norm.gene.counts,
+                                p1.region.sample.names, p1.gene.sample.names,
+                                "p1",
+                                "background",
+                                paste0("../r_results/predict_correlated_deg/p1_bkgd_in_tad_",
+                                       vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                       "_min-baseMean", min.baseMean, ".rds"))
+
+p2.bkgd.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges,
+                                p2.norm.region.counts, p2.norm.gene.counts,
+                                p2.region.sample.names, p2.gene.sample.names,
+                                "p2",
+                                "background",
+                                paste0("../r_results/predict_correlated_deg/p2_bkgd_in_tad_",
+                                       vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                       "_min-baseMean", min.baseMean, ".rds"))
+
+pM.bkgd.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges,
+                                pM.norm.region.counts, pM.norm.gene.counts,
+                                pM.region.sample.names, pM.gene.sample.names,
+                                "pM",
+                                "background",
+                                paste0("../r_results/predict_correlated_deg/pM_bkgd_in_tad_",
+                                       vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                       "_min-baseMean", min.baseMean, ".rds"))
+
+p = ggplot(p1.bkgd.tad) +
+  geom_histogram(aes(x = abs_pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_bkgd_in_tad_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist.pdf"),
+       plot = p)
+
+p = ggplot(p2.bkgd.tad) +
+  geom_histogram(aes(x = abs_pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p2_bkgd_in_tad_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist.pdf"),
+       plot = p)
+
+p = ggplot(pM.bkgd.tad) +
+  geom_histogram(aes(x = abs_pcc), 
+                 binwidth = 0.05) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_bkgd_in_tad_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_hist.pdf"),
+       plot = p)
+
+p1.corr.tad.sign = p1.corr.tad %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p1.bkgd.tad)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p1, TAD:", nrow(p1.corr.tad.sign %>% filter(sign.padj)), "\n")
+
+p2.corr.tad.sign = p2.corr.tad %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p2.bkgd.tad)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p2, TAD:", nrow(p2.corr.tad.sign %>% filter(sign.padj)), "\n")
+
+pM.corr.tad.sign = pM.corr.tad %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, pM.bkgd.tad)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, TAD:", nrow(pM.corr.tad.sign %>% filter(sign.padj)), "\n")
+```
+
 

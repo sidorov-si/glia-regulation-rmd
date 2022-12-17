@@ -149,6 +149,10 @@ analyse_diff_accessibility = function(cond.target.long, cond.ref.long,
   saveRDS(p.res, file = paste0("../r_results/diff_accessibility/tables/deseq2-results_", cond.target.long, "_vs_", cond.ref.long, 
                                "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
   
+  # Save the result DESeq object
+  saveRDS(p.dds, file = paste0("../r_results/diff_accessibility/tables/deseq2-dds_", cond.target.long, "_vs_", cond.ref.long, 
+                               "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+  
   return(p.res)
 }
 ```
