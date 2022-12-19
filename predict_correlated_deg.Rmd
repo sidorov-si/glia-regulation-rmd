@@ -167,8 +167,6 @@ generate_vicinity_tad = function(min.tad.size, max.tad.size, dep.regions, domain
                   vicinity_start = start,
                   vicinity_end = end)
   
-  cat("nrow(regions.in.tads.final) =", nrow(regions.in.tads.final), "\n")
-  
   regions.in.tads.final.ranges = GRanges(seqnames = regions.in.tads.final$seqnames,
                                          ranges = IRanges(start = regions.in.tads.final$vicinity_start,
                                                           end = regions.in.tads.final$vicinity_end,
@@ -322,7 +320,7 @@ calc_correlations = function(vicinity.gr, dep.tss,
                   pcc) %>%
     mutate(abs_pcc = abs(pcc))
   
-  cat(domain.name, "\n")
+  cat(domain.name, ":", calc.mode, "\n")
   
   cat("Number of region-gene associations:", nrow(vicinity.tss.corr.final), "\n")
   
@@ -343,6 +341,178 @@ Define a function to calculate empirical p-values for PCCs:
 ```{r, include=T}
 calc_empirical_pvalue = function(abs.pcc, bkgd.df) {
   return(nrow(bkgd.df %>% filter(abs_pcc > abs.pcc)) / nrow(bkgd.df))
+}
+```
+
+Define a function to find significant NFIA-dependent region-gene assignments:
+
+```{r, include=T}
+assign_regions_to_genes = function(domain.name, area.type) {
+  cat(domain.name, ",", area.type, ": fdr =", fdr, ";", "min.l2fc =", min.l2fc, ";", "min.baseMean =", min.baseMean, "\n")
+  
+  dep.regions = import(paste0("../r_results/select_diff_regions/", domain.name, "_dep_ranges", 
+                              "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+                              ".bed"))
+  
+  if (area.type == "radius") {
+    vicinity.file.name = paste0("../r_results/predict_correlated_deg/", domain.name, "_vicinities_radius_", 
+                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                "_min-baseMean", min.baseMean, ".bed")
+    
+    vicinity = generate_vicinity_radius(dep.regions, 
+                                        vicinity.radius,
+                                        vicinity.file.name)
+    
+  } else if (area.type == "tad") {
+    vicinity.file.name = paste0("../r_results/predict_correlated_deg/", domain.name, "_vicinities_largest_tad_", 
+                                min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, ".bed")
+    
+    vicinity = generate_vicinity_tad(min.tad.size,
+                                     max.tad.size,
+                                     dep.regions,
+                                     domain.name,
+                                     vicinity.file.name)
+  }
+  
+  if (domain.name == "p1") {
+    dep.tss.ranges = p1.dep.tss.ranges
+    
+    norm.region.counts = p1.norm.region.counts
+    
+    norm.gene.counts = p1.norm.gene.counts
+    
+    gene.sample.names = p1.gene.sample.names
+    
+    region.sample.names = p1.region.sample.names
+    
+  } else if (domain.name == "p2") {
+    dep.tss.ranges = p2.dep.tss.ranges
+    
+    norm.region.counts = p2.norm.region.counts
+    
+    norm.gene.counts = p2.norm.gene.counts
+    
+    gene.sample.names = p2.gene.sample.names
+    
+    region.sample.names = p2.region.sample.names
+    
+  } else if (domain.name == "pM") {
+    dep.tss.ranges = pM.dep.tss.ranges
+    
+    norm.region.counts = pM.norm.region.counts
+    
+    norm.gene.counts = pM.norm.gene.counts
+    
+    gene.sample.names = pM.gene.sample.names
+    
+    region.sample.names = pM.region.sample.names
+  }
+  
+  if (area.type == "radius") {
+    corr.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_corr_in_radius_",
+                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    corr.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_corr_in_radius_",
+                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+    
+    bkgd.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_bkgd_in_radius_",
+                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    bkgd.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_bkgd_in_radius_",
+                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+    
+  } else if (area.type == "tad") {
+    corr.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_corr_in_largest_tad_",
+                           min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    corr.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_corr_in_largest_tad_",
+                                min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+
+    bkgd.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_bkgd_in_largest_tad_",
+                           min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    bkgd.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_bkgd_in_largest_tad_",
+                                min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+  }
+  
+  corr = calc_correlations(vicinity, dep.tss.ranges,
+                           norm.region.counts, norm.gene.counts,
+                           region.sample.names, gene.sample.names,
+                           domain.name,
+                           "target",
+                           corr.filename)
+  
+  p = ggplot(corr) +
+    geom_histogram(aes(x = abs_pcc), 
+                   binwidth = 0.05) +
+    theme_classic()
+  
+  ggsave(filename = corr.plot.filename,
+         plot = p)
+  
+  bkgd = calc_correlations(vicinity, dep.tss.ranges,
+                           norm.region.counts, norm.gene.counts,
+                           region.sample.names, gene.sample.names,
+                           domain.name,
+                           "background",
+                           bkgd.filename)
+  
+  p = ggplot(bkgd) +
+    geom_histogram(aes(x = abs_pcc), 
+                   binwidth = 0.05) +
+    theme_classic()
+  
+  ggsave(filename = bkgd.plot.filename,
+         plot = p)
+  
+  corr.sign = corr %>%
+    rowwise() %>%
+    mutate(pvalue = calc_empirical_pvalue(abs_pcc, bkgd)) %>%
+    ungroup() %>%
+    mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+    mutate(fdr = pcc.fdr) %>%
+    mutate(sign.padj = (padj < fdr))
+  
+  cat(domain.name, ":", area.type, "\n")
+  
+  cat("Number of significant NFIA-dependent region-gene pairs ( FDR =", pcc.fdr, ") :", nrow(corr.sign %>% filter(sign.padj)), "\n")
+  
+  cat("---\n")
+  
+  if (nrow(corr.sign %>% filter(sign.padj)) > 0) {
+    if (domain.name == "p1") {
+      strictest.dep.regions = p1.dep.regions$name
+      
+    } else if (domain.name == "p2") {
+      strictest.dep.regions = p2.dep.regions$name
+      
+    } else if (domain.name == "pM") {
+      strictest.dep.regions = pM.dep.regions$name
+    }
+    
+    sign.assigned.regions = corr.sign %>% 
+      filter(sign.padj) %>%
+      pull(region_id) %>%
+      unique()
+    
+    cat("Number of the strictest regions among all regions in significant assignments:", 
+        length(intersect(sign.assigned.regions, strictest.dep.regions)),
+        "(", length(intersect(sign.assigned.regions, strictest.dep.regions)) / length(sign.assigned.regions), ")\n")
+  }
+  
+  return(list("vicinity" = vicinity,
+              "corr" = corr,
+              "bkgd" = bkgd,
+              "corr.sign" = corr.sign))
 }
 ```
 
@@ -780,6 +950,30 @@ as.data.frame(p1.all.degs) %>%
 
 There are only three such genes. This explains the small number of negative PCCs then (3 * 577 = 1731, and the plot shows roughly this total number of negative PCCs).
 
+Check the number of downregulated reference genes in the other two domains:
+
+```{r, include=T}
+p2.ref.degs = readRDS("../r_results/diff_expression/tables/p2_ref_genes.rds")
+
+p2.all.degs = readRDS("../r_results/diff_expression/tables/deseq-results_p2-WT-D11-NFIAp_vs_p2-WT-D7-NFIAn.rds")
+
+as.data.frame(p2.all.degs) %>% 
+  rownames_to_column(var = "gene_name") %>% 
+  filter(gene_name %in% p2.ref.degs) %>% 
+  arrange(log2FoldChange) %>%
+  filter(log2FoldChange < 0)
+
+pM.ref.degs = readRDS("../r_results/diff_expression/tables/pM_ref_genes.rds")
+
+pM.all.degs = readRDS("../r_results/diff_expression/tables/deseq-results_pM-WT-D11-NFIAp_vs_pM-WT-D7-NFIAn.rds")
+
+as.data.frame(pM.all.degs) %>% 
+  rownames_to_column(var = "gene_name") %>% 
+  filter(gene_name %in% pM.ref.degs) %>% 
+  arrange(log2FoldChange) %>%
+  filter(log2FoldChange < 0)
+```
+
 Simulate PCCs between 3-value vectors (representing three batches of close replicates in each vector) with the fixed first and third values:
 
 ```{r, include=T}
@@ -980,8 +1174,8 @@ p1.bkgd.tad = calc_correlations(p1.vicinity.tad, p1.dep.tss.ranges,
                                 p1.region.sample.names, p1.gene.sample.names,
                                 "p1",
                                 "background",
-                                paste0("../r_results/predict_correlated_deg/p1_bkgd_in_tad_",
-                                       vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                paste0("../r_results/predict_correlated_deg/p1_bkgd_in_largest_tad_",
+                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                        "_min-baseMean", min.baseMean, ".rds"))
 
 p2.bkgd.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges,
@@ -989,8 +1183,8 @@ p2.bkgd.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges,
                                 p2.region.sample.names, p2.gene.sample.names,
                                 "p2",
                                 "background",
-                                paste0("../r_results/predict_correlated_deg/p2_bkgd_in_tad_",
-                                       vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                paste0("../r_results/predict_correlated_deg/p2_bkgd_in_largest_tad_",
+                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                        "_min-baseMean", min.baseMean, ".rds"))
 
 pM.bkgd.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges,
@@ -998,8 +1192,8 @@ pM.bkgd.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges,
                                 pM.region.sample.names, pM.gene.sample.names,
                                 "pM",
                                 "background",
-                                paste0("../r_results/predict_correlated_deg/pM_bkgd_in_tad_",
-                                       vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                paste0("../r_results/predict_correlated_deg/pM_bkgd_in_largest_tad_",
+                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                        "_min-baseMean", min.baseMean, ".rds"))
 
 p = ggplot(p1.bkgd.tad) +
@@ -1007,8 +1201,8 @@ p = ggplot(p1.bkgd.tad) +
                  binwidth = 0.05) +
   theme_classic()
 
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_bkgd_in_tad_",
-                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+ggsave(filename = paste0("../r_results/predict_correlated_deg/p1_bkgd_in_largest_tad_",
+                         min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                          "_min-baseMean", min.baseMean, "_hist.pdf"),
        plot = p)
 
@@ -1017,8 +1211,8 @@ p = ggplot(p2.bkgd.tad) +
                  binwidth = 0.05) +
   theme_classic()
 
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p2_bkgd_in_tad_",
-                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+ggsave(filename = paste0("../r_results/predict_correlated_deg/p2_bkgd_in_largest_tad_",
+                         min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                          "_min-baseMean", min.baseMean, "_hist.pdf"),
        plot = p)
 
@@ -1027,8 +1221,8 @@ p = ggplot(pM.bkgd.tad) +
                  binwidth = 0.05) +
   theme_classic()
 
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_bkgd_in_tad_",
-                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+ggsave(filename = paste0("../r_results/predict_correlated_deg/pM_bkgd_in_largest_tad_",
+                         min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                          "_min-baseMean", min.baseMean, "_hist.pdf"),
        plot = p)
 
@@ -1063,4 +1257,211 @@ pM.corr.tad.sign = pM.corr.tad %>%
 cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, TAD:", nrow(pM.corr.tad.sign %>% filter(sign.padj)), "\n")
 ```
 
+Try to lower the region selection cutoffs and see if any statistically significant region-gene associations (FDR = 5%) emerge. First, re-do the analysis with the strictest cutoffs to have all results in the same format:
 
+```{r, include=T}
+# # Set 1 (Joaquina's strictest cutoffs for NFIA-dependent regions)
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 100
+# 
+# assoc.list.1.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.1.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.1.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.1.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.1.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.1.tad.pM = assign_regions_to_genes("pM", "tad")
+# 
+# # Set 2
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 80
+# 
+# assoc.list.2.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.2.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.2.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.2.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.2.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.2.tad.pM = assign_regions_to_genes("pM", "tad")
+# 
+# # Set 3
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 60
+# 
+# assoc.list.3.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.3.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.3.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.3.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.3.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.3.tad.pM = assign_regions_to_genes("pM", "tad")
+# 
+# # Set 4
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 40
+# 
+# assoc.list.4.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.4.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.4.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.4.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.4.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.4.tad.pM = assign_regions_to_genes("pM", "tad")
+# 
+# # Set 5
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 20
+# 
+# assoc.list.5.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.5.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.5.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.5.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.5.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.5.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# Set 6 
+# fdr = 0.01
+# min.l2fc = 1.5 # Min log2(fold change)
+# min.baseMean = 20
+# 
+# assoc.list.6.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.6.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.6.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.6.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.6.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.6.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# Set 7 
+# fdr = 0.01
+# min.l2fc = 1 # Min log2(fold change)
+# min.baseMean = 20
+# 
+# assoc.list.7.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.7.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.7.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.7.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.7.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.7.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# # Set 8 
+# fdr = 0.01
+# min.l2fc = 0.5 # Min log2(fold change)
+# min.baseMean = 20
+# 
+# assoc.list.8.radius.p1 = assign_regions_to_genes("p1", "radius")
+# 
+# assoc.list.8.tad.p1 = assign_regions_to_genes("p1", "tad")
+# 
+# assoc.list.8.radius.p2 = assign_regions_to_genes("p2", "radius")
+# 
+# assoc.list.8.tad.p2 = assign_regions_to_genes("p2", "tad")
+# 
+# assoc.list.8.radius.pM = assign_regions_to_genes("pM", "radius")
+# 
+# assoc.list.8.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# Set 9 
+fdr = 0.02
+min.l2fc = 0.5 # Min log2(fold change)
+min.baseMean = 20
+
+assoc.list.9.radius.p1 = assign_regions_to_genes("p1", "radius")
+
+assoc.list.9.tad.p1 = assign_regions_to_genes("p1", "tad")
+
+assoc.list.9.radius.p2 = assign_regions_to_genes("p2", "radius")
+
+assoc.list.9.tad.p2 = assign_regions_to_genes("p2", "tad")
+
+assoc.list.9.radius.pM = assign_regions_to_genes("pM", "radius")
+
+assoc.list.9.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# Set 10 
+fdr = 0.03
+min.l2fc = 0.5 # Min log2(fold change)
+min.baseMean = 20
+
+assoc.list.10.radius.p1 = assign_regions_to_genes("p1", "radius")
+
+assoc.list.10.tad.p1 = assign_regions_to_genes("p1", "tad")
+
+assoc.list.10.radius.p2 = assign_regions_to_genes("p2", "radius")
+
+assoc.list.10.tad.p2 = assign_regions_to_genes("p2", "tad")
+
+assoc.list.10.radius.pM = assign_regions_to_genes("pM", "radius")
+
+assoc.list.10.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# Set 11 
+fdr = 0.04
+min.l2fc = 0.5 # Min log2(fold change)
+min.baseMean = 20
+
+assoc.list.11.radius.p1 = assign_regions_to_genes("p1", "radius")
+
+assoc.list.11.tad.p1 = assign_regions_to_genes("p1", "tad")
+
+assoc.list.11.radius.p2 = assign_regions_to_genes("p2", "radius")
+
+assoc.list.11.tad.p2 = assign_regions_to_genes("p2", "tad")
+
+assoc.list.11.radius.pM = assign_regions_to_genes("pM", "radius")
+
+assoc.list.11.tad.pM = assign_regions_to_genes("pM", "tad")
+
+# Set 12 
+fdr = 0.05
+min.l2fc = 0.5 # Min log2(fold change)
+min.baseMean = 20
+
+assoc.list.12.radius.p1 = assign_regions_to_genes("p1", "radius")
+
+assoc.list.12.tad.p1 = assign_regions_to_genes("p1", "tad")
+
+assoc.list.12.radius.p2 = assign_regions_to_genes("p2", "radius")
+
+assoc.list.12.tad.p2 = assign_regions_to_genes("p2", "tad")
+
+assoc.list.12.radius.pM = assign_regions_to_genes("pM", "radius")
+
+assoc.list.12.tad.pM = assign_regions_to_genes("pM", "tad")
+
+```

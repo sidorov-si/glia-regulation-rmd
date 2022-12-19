@@ -1,0 +1,154 @@
+---
+title: "find_shared_regions_and_genes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+dyn.load("/home/rstudio/libs/libxml2.so.2")
+#library(DESeq2)
+library(dplyr)
+#library(GenomicRanges)
+library(tibble)
+library(rtracklayer)
+library(ggplot2)
+#library(stringr)
+```
+
+Define cutoff sets:
+
+```{r, include=T}
+region.cutoffs = list("set1" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 100),
+                      "set2" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 80),
+                      "set3" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 60),
+                      "set4" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 40),
+                      "set5" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 20),
+                      "set6" = list("fdr" = 0.01, "min.l2fc" = 1.5, "min.baseMean" = 20),
+                      "set7" = list("fdr" = 0.01, "min.l2fc" = 1, "min.baseMean" = 20),
+                      "set8" = list("fdr" = 0.01, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set9" = list("fdr" = 0.02, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set10" = list("fdr" = 0.03, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set11" = list("fdr" = 0.04, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set12" = list("fdr" = 0.05, "min.l2fc" = 0.5, "min.baseMean" = 20))
+```
+
+Define a general function to find the proportions of shared and unique features in three sets:
+
+```{r, include=T}
+find_shared_features = function(p1, p2, pM, plot.filename) {
+  union.all = unique(c(p1, p2, pM))
+  
+  union.12 = unique(c(p1, p2))
+  
+  union.1M = unique(c(p1, pM))
+  
+  union.2M = unique(c(p2, pM))
+  
+  inter.all = intersect(intersect(p1, p2), pM)
+  
+  inter.12 = intersect(p1, p2)
+  
+  inter.1M = intersect(p1, pM)
+  
+  inter.2M = intersect(p2, pM)
+  
+  proportions.df = data.frame(p1_num = length(p1),
+                              p2_num = length(p2),
+                              pM_num = length(pM),
+                              p1 = length(setdiff(union.all, union.2M)) / length(p1),
+                              p2 = length(setdiff(union.all, union.1M)) / length(p2),
+                              pM = length(setdiff(union.all, union.12)) / length(pM),
+                              p12_1 = length(setdiff(inter.12, inter.all)) / length(p1),
+                              p12_2 = length(setdiff(inter.12, inter.all)) / length(p2),
+                              p1M_1 = length(setdiff(inter.1M, inter.all)) / length(p1),
+                              p1M_M = length(setdiff(inter.1M, inter.all)) / length(pM),
+                              p2M_2 = length(setdiff(inter.2M, inter.all)) / length(p2),
+                              p2M_M = length(setdiff(inter.2M, inter.all)) / length(pM),
+                              p12M_1 = length(inter.all) / length(p1),
+                              p12M_2 = length(inter.all) / length(p2),
+                              p12M_M = length(inter.all) / length(pM))
+  
+  p = data.frame(category = c("1", "2", "M",
+                              rep("12", 2), rep("1M", 2), rep("2M", 2),
+                              rep("12M", 3)),
+                 domain = c("p1", "p2", "pM",
+                            "p1", "p2", "p1", "pM", "p2", "pM",
+                            "p1", "p2", "pM"),
+                 proportion = c(proportions.df$p1,
+                                proportions.df$p2,
+                                proportions.df$pM,
+                                proportions.df$p12_1,
+                                proportions.df$p12_2,
+                                proportions.df$p1M_1,
+                                proportions.df$p1M_M,
+                                proportions.df$p2M_2,
+                                proportions.df$p2M_M,
+                                proportions.df$p12M_1,
+                                proportions.df$p12M_2,
+                                proportions.df$p12M_M)) %>% 
+    mutate(category = factor(category, levels = c("1", "2", "M",
+                                                  "12", "1M", "2M",
+                                                  "12M"))) %>%
+    ggplot(aes(x = category, y = proportion, fill = domain)) +
+      geom_col(position = position_dodge2(preserve = "single")) +
+      theme_classic()
+  
+  ggsave(filename = plot.filename,
+         plot = p)  
+  
+  return(proportions.df)
+}
+```
+
+Find NFIA-dependent genes that are shared between two or three domains or are unique to particular domains:
+
+```{r, include=T}
+p1.dep.genes = readRDS(file = "../r_results/diff_expression/tables/p1_ref_genes.rds")
+
+p2.dep.genes = readRDS(file = "../r_results/diff_expression/tables/p2_ref_genes.rds")
+
+pM.dep.genes = readRDS(file = "../r_results/diff_expression/tables/pM_ref_genes.rds")
+
+gene.proportions = find_shared_features(p1.dep.genes,
+                                        p2.dep.genes,
+                                        pM.dep.genes,
+                                        paste0("../r_results/find_shared_regions_and_genes/plots/",
+                                               "proportions_of_shared_and_unique_genes.pdf"))
+```
+
+From 40% (p2) to ~70% (pM) of NFIA-dependent genes are unique to their respective domains, hence we do not expect many NFIA-dependent region-gene assignments in common between domains, independently of an assignment method.
+
+Find NFIA-dependent regions that are shared between two or three domains or are unique to particular domains: 
+
+```{r, include=T}
+region.proportions = bind_rows(lapply(paste0("set", seq(1:(length(region.cutoffs)))),
+                                      function(s) {
+                                        fdr = region.cutoffs[[s]]$fdr
+                                        min.l2fc = region.cutoffs[[s]]$min.l2fc
+                                        min.baseMean = region.cutoffs[[s]]$min.baseMean
+                                        p1.dep.regions = import(paste0("../r_results/select_diff_regions/p1_dep_ranges", 
+                                                                       "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+                                                                       ".bed"))
+                                        p2.dep.regions = import(paste0("../r_results/select_diff_regions/p2_dep_ranges", 
+                                                                       "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+                                                                       ".bed"))
+                                        pM.dep.regions = import(paste0("../r_results/select_diff_regions/pM_dep_ranges", 
+                                                                       "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+                                                                       ".bed"))
+                                        return(find_shared_features(p1.dep.regions$name,
+                                                                    p2.dep.regions$name,
+                                                                    pM.dep.regions$name,
+                                                                    paste0("../r_results/find_shared_regions_and_genes/plots/",
+                                                                           "proportions_of_shared_and_unique_regions", 
+                                                                           "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+                                                                           ".pdf")))
+                                      }))
+```
+
+The proportions of shared and unique NFIA-dependent regions demonstrate two trends:
+
+1) In contrast to NFIA-dependent genes, NFIA-dependent regions are predominantly shared, especially, those from p1.
+
+2) The proportion of NFIA-dependent regions unique to a particular domain ranges from ~10% to ~20%, depending on particular cutoffs, but does not increase considerably with any set of cutoffs.
+
+Therefore, independently of a region-gene assignment method, we expect that the majority of assigned NFIA-dependent regions will demonstrate domain-specific assignments because their partner gene is likely lacking in the other two domains. This differential assignment could be realised in two ways: (1) a region becomes unassigned in other domains; (b) a region becomes assigned to another partner gene in other domains.

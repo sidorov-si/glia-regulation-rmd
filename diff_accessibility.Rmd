@@ -21,9 +21,55 @@ Set significance parameters:
 
 ```{r, include=T}
 # Joaquina's parameters
-fdr = 0.01
-min.l2fc = 2 # Min log2(fold change)
-min.baseMean = 100
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 100
+
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 80
+
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 60
+
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 40
+
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change)
+# min.baseMean = 20
+
+# fdr = 0.01
+# min.l2fc = 1.5 # Min log2(fold change)
+# min.baseMean = 20
+
+# fdr = 0.01
+# min.l2fc = 1 # Min log2(fold change)
+# min.baseMean = 20
+
+# fdr = 0.01
+# min.l2fc = 0.5 # Min log2(fold change)
+# min.baseMean = 20
+
+# fdr = 0.02
+# min.l2fc = 0.5 # Min log2(fold change)
+# min.baseMean = 20
+
+# fdr = 0.03
+# min.l2fc = 0.5 # Min log2(fold change)
+# min.baseMean = 20
+
+# fdr = 0.04
+# min.l2fc = 0.5 # Min log2(fold change)
+# min.baseMean = 20
+
+fdr = 0.05
+min.l2fc = 0.5 # Min log2(fold change)
+min.baseMean = 20
+
+# ---
 
 # fdr = 0.01
 # min.l2fc = 2 # Min log2(fold change)
