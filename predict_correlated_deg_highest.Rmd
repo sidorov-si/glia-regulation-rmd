@@ -1,0 +1,282 @@
+---
+title: "predict_correlated_deg"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+dyn.load("/home/rstudio/libs/libxml2.so.2")
+library(DESeq2)
+library(dplyr)
+library(GenomicRanges)
+library(tibble)
+library(rtracklayer)
+library(ggplot2)
+library(stringr)
+```
+
+Define constants:
+
+```{r, include=T}
+pcc.cutoff = 0.9
+```
+
+Define cutoff sets:
+
+```{r, include=T}
+region.cutoffs = list("set1" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 100),
+                      "set2" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 80),
+                      "set3" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 60),
+                      "set4" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 40),
+                      "set5" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 20),
+                      "set6" = list("fdr" = 0.01, "min.l2fc" = 1.5, "min.baseMean" = 20),
+                      "set7" = list("fdr" = 0.01, "min.l2fc" = 1, "min.baseMean" = 20),
+                      "set8" = list("fdr" = 0.01, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set9" = list("fdr" = 0.02, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set10" = list("fdr" = 0.03, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set11" = list("fdr" = 0.04, "min.l2fc" = 0.5, "min.baseMean" = 20),
+                      "set12" = list("fdr" = 0.05, "min.l2fc" = 0.5, "min.baseMean" = 20))
+```
+
+Define a function to find NFIA-dependent region-gene assignments:
+
+```{r, include=T}
+# Rewrite
+assign_regions_to_genes = function(domain.name, area.type) {
+  cat(domain.name, ",", area.type, ": fdr =", fdr, ";", "min.l2fc =", min.l2fc, ";", "min.baseMean =", min.baseMean, "\n")
+  
+  dep.regions = import(paste0("../r_results/select_diff_regions/", domain.name, "_dep_ranges", 
+                              "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
+                              ".bed"))
+  
+  if (area.type == "radius") {
+    vicinity.file.name = paste0("../r_results/predict_correlated_deg/", domain.name, "_vicinities_radius_", 
+                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                "_min-baseMean", min.baseMean, ".bed")
+    
+    vicinity = generate_vicinity_radius(dep.regions, 
+                                        vicinity.radius,
+                                        vicinity.file.name)
+    
+  } else if (area.type == "tad") {
+    vicinity.file.name = paste0("../r_results/predict_correlated_deg/", domain.name, "_vicinities_largest_tad_", 
+                                min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, ".bed")
+    
+    vicinity = generate_vicinity_tad(min.tad.size,
+                                     max.tad.size,
+                                     dep.regions,
+                                     domain.name,
+                                     vicinity.file.name)
+  }
+  
+  if (domain.name == "p1") {
+    dep.tss.ranges = p1.dep.tss.ranges
+    
+    norm.region.counts = p1.norm.region.counts
+    
+    norm.gene.counts = p1.norm.gene.counts
+    
+    gene.sample.names = p1.gene.sample.names
+    
+    region.sample.names = p1.region.sample.names
+    
+  } else if (domain.name == "p2") {
+    dep.tss.ranges = p2.dep.tss.ranges
+    
+    norm.region.counts = p2.norm.region.counts
+    
+    norm.gene.counts = p2.norm.gene.counts
+    
+    gene.sample.names = p2.gene.sample.names
+    
+    region.sample.names = p2.region.sample.names
+    
+  } else if (domain.name == "pM") {
+    dep.tss.ranges = pM.dep.tss.ranges
+    
+    norm.region.counts = pM.norm.region.counts
+    
+    norm.gene.counts = pM.norm.gene.counts
+    
+    gene.sample.names = pM.gene.sample.names
+    
+    region.sample.names = pM.region.sample.names
+  }
+  
+  if (area.type == "radius") {
+    corr.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_corr_in_radius_",
+                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    corr.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_corr_in_radius_",
+                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+    
+    bkgd.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_bkgd_in_radius_",
+                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    bkgd.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_bkgd_in_radius_",
+                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+    
+  } else if (area.type == "tad") {
+    corr.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_corr_in_largest_tad_",
+                           min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    corr.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_corr_in_largest_tad_",
+                                min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+
+    bkgd.filename = paste0("../r_results/predict_correlated_deg/", domain.name, "_bkgd_in_largest_tad_",
+                           min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, ".rds")
+    
+    bkgd.plot.filename = paste0("../r_results/predict_correlated_deg/plots/", domain.name, "_bkgd_in_largest_tad_",
+                                min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                "_min-baseMean", min.baseMean, "_hist.pdf")
+  }
+  
+  corr = calc_correlations(vicinity, dep.tss.ranges,
+                           norm.region.counts, norm.gene.counts,
+                           region.sample.names, gene.sample.names,
+                           domain.name,
+                           "target",
+                           corr.filename)
+  
+  p = ggplot(corr) +
+    geom_histogram(aes(x = abs_pcc), 
+                   binwidth = 0.05) +
+    theme_classic()
+  
+  ggsave(filename = corr.plot.filename,
+         plot = p)
+  
+  bkgd = calc_correlations(vicinity, dep.tss.ranges,
+                           norm.region.counts, norm.gene.counts,
+                           region.sample.names, gene.sample.names,
+                           domain.name,
+                           "background",
+                           bkgd.filename)
+  
+  p = ggplot(bkgd) +
+    geom_histogram(aes(x = abs_pcc), 
+                   binwidth = 0.05) +
+    theme_classic()
+  
+  ggsave(filename = bkgd.plot.filename,
+         plot = p)
+  
+  corr.sign = corr %>%
+    rowwise() %>%
+    mutate(pvalue = calc_empirical_pvalue(abs_pcc, bkgd)) %>%
+    ungroup() %>%
+    mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+    mutate(fdr = pcc.fdr) %>%
+    mutate(sign.padj = (padj < fdr))
+  
+  cat(domain.name, ":", area.type, "\n")
+  
+  cat("Number of significant NFIA-dependent region-gene pairs ( FDR =", pcc.fdr, ") :", nrow(corr.sign %>% filter(sign.padj)), "\n")
+  
+  cat("---\n")
+  
+  if (nrow(corr.sign %>% filter(sign.padj)) > 0) {
+    if (domain.name == "p1") {
+      strictest.dep.regions = p1.dep.regions$name
+      
+    } else if (domain.name == "p2") {
+      strictest.dep.regions = p2.dep.regions$name
+      
+    } else if (domain.name == "pM") {
+      strictest.dep.regions = pM.dep.regions$name
+    }
+    
+    sign.assigned.regions = corr.sign %>% 
+      filter(sign.padj) %>%
+      pull(region_id) %>%
+      unique()
+    
+    cat("Number of the strictest regions among all regions in significant assignments:", 
+        length(intersect(sign.assigned.regions, strictest.dep.regions)),
+        "(", length(intersect(sign.assigned.regions, strictest.dep.regions)) / length(sign.assigned.regions), ")\n")
+  }
+  
+  return(list("vicinity" = vicinity,
+              "corr" = corr,
+              "bkgd" = bkgd,
+              "corr.sign" = corr.sign))
+}
+```
+
+Define a general function to find the proportions of shared and unique features in three sets:
+
+```{r, include=T}
+find_shared_features = function(p1, p2, pM, plot.filename) {
+  union.all = unique(c(p1, p2, pM))
+  
+  union.12 = unique(c(p1, p2))
+  
+  union.1M = unique(c(p1, pM))
+  
+  union.2M = unique(c(p2, pM))
+  
+  inter.all = intersect(intersect(p1, p2), pM)
+  
+  inter.12 = intersect(p1, p2)
+  
+  inter.1M = intersect(p1, pM)
+  
+  inter.2M = intersect(p2, pM)
+  
+  proportions.df = data.frame(p1_num = length(p1),
+                              p2_num = length(p2),
+                              pM_num = length(pM),
+                              p1 = length(setdiff(union.all, union.2M)) / length(p1),
+                              p2 = length(setdiff(union.all, union.1M)) / length(p2),
+                              pM = length(setdiff(union.all, union.12)) / length(pM),
+                              p12_1 = length(setdiff(inter.12, inter.all)) / length(p1),
+                              p12_2 = length(setdiff(inter.12, inter.all)) / length(p2),
+                              p1M_1 = length(setdiff(inter.1M, inter.all)) / length(p1),
+                              p1M_M = length(setdiff(inter.1M, inter.all)) / length(pM),
+                              p2M_2 = length(setdiff(inter.2M, inter.all)) / length(p2),
+                              p2M_M = length(setdiff(inter.2M, inter.all)) / length(pM),
+                              p12M_1 = length(inter.all) / length(p1),
+                              p12M_2 = length(inter.all) / length(p2),
+                              p12M_M = length(inter.all) / length(pM))
+  
+  p = data.frame(category = c("1", "2", "M",
+                              rep("12", 2), rep("1M", 2), rep("2M", 2),
+                              rep("12M", 3)),
+                 domain = c("p1", "p2", "pM",
+                            "p1", "p2", "p1", "pM", "p2", "pM",
+                            "p1", "p2", "pM"),
+                 proportion = c(proportions.df$p1,
+                                proportions.df$p2,
+                                proportions.df$pM,
+                                proportions.df$p12_1,
+                                proportions.df$p12_2,
+                                proportions.df$p1M_1,
+                                proportions.df$p1M_M,
+                                proportions.df$p2M_2,
+                                proportions.df$p2M_M,
+                                proportions.df$p12M_1,
+                                proportions.df$p12M_2,
+                                proportions.df$p12M_M)) %>% 
+    mutate(category = factor(category, levels = c("1", "2", "M",
+                                                  "12", "1M", "2M",
+                                                  "12M"))) %>%
+    ggplot(aes(x = category, y = proportion, fill = domain)) +
+      geom_col(position = position_dodge2(preserve = "single")) +
+      theme_classic()
+  
+  ggsave(filename = plot.filename,
+         plot = p)  
+  
+  return(proportions.df)
+}
+```
+
+
