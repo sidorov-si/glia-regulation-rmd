@@ -153,61 +153,19 @@ add_region_suffix = function(column.names) {
   return(paste0(column.names, "_region"))
 }
 
-# find_background_pairs = function(dep.tss, vicinity.gr) {
-#   dep.tss.df = as.data.frame(dep.tss) %>%
-#     rownames_to_column(var = "tx_id") %>%
-#     rownames_to_column(var = "tss_num") %>%
-#     dplyr::select(tss_num,
-#                   seqnames,
-#                   gene_name)
-# 
-#   vicinity.df = as.data.frame(vicinity.gr) %>%
-#     rownames_to_column(var = "region_name") %>%
-#     rownames_to_column(var = "region_num") %>%
-#     dplyr::select(region_num,
-#                   seqnames,
-#                   region_name)
-# 
-#   dep.tss.chrs = as.character(unique(sort(dep.tss.df$seqnames)))
-# 
-#   chr.corresp.df = bind_rows(lapply(dep.tss.chrs,
-#                                     function(chr) {
-#                                       vicinity.df %>%
-#                                         filter(seqnames != chr) %>%
-#                                         mutate(chr = chr) %>%
-#                                         dplyr::select(chr,
-#                                                       region_num)
-#                                     }))
-# 
-#   hits.df = dep.tss.df %>%
-#     left_join(chr.corresp.df,
-#               by = c("seqnames" = "chr"))
-# 
-#   hits = Hits(from = as.integer(hits.df$tss_num),
-#               to = as.integer(hits.df$region_num),
-#               nLnode = nrow(dep.tss.df),
-#               nRnode = nrow(vicinity.df))
-# 
-#   return(hits)
-# }
-
 # Find Pearson correlation coefficients between region accessibility and gene expression
 calc_correlations = function(vicinity.gr, dep.tss,
                              norm.region.counts, norm.gene.counts,
                              region.sample.names, gene.sample.names,
-                             domain.name, calc.mode, corr.rds.filename) {
+                             domain.name, corr.rds.filename) {
   region.tss.shared.sample.names = intersect(region.sample.names, gene.sample.names)
 
-  if (calc.mode == "target") {
-    tss.vicinity.hits = GenomicRanges::findOverlaps(query = dep.tss,
-                                                    subject = vicinity.gr,
-                                                    type = "within",
-                                                    select = "all",
-                                                    ignore.strand = T)
-  } else if (calc.mode == "background") {
-    tss.vicinity.hits = find_background_pairs(dep.tss,
-                                              vicinity.gr)
-  }
+
+  tss.vicinity.hits = GenomicRanges::findOverlaps(query = dep.tss,
+                                                  subject = vicinity.gr,
+                                                  type = "within",
+                                                  select = "all",
+                                                  ignore.strand = T)
 
   tss.hits = data.frame(tss_num = queryHits(tss.vicinity.hits)) %>%
     left_join(as.data.frame(dep.tss) %>%
@@ -256,7 +214,7 @@ calc_correlations = function(vicinity.gr, dep.tss,
                   pcc) %>%
     mutate(abs_pcc = abs(pcc))
 
-  cat(domain.name, ":", calc.mode, "\n")
+  cat(domain.name, ":\n")
 
   cat("Number of region-gene associations:", nrow(vicinity.tss.corr.final), "\n")
 
@@ -269,6 +227,40 @@ calc_correlations = function(vicinity.gr, dep.tss,
   saveRDS(vicinity.tss.corr.final, corr.rds.filename)
 
   return(vicinity.tss.corr.final)
+}
+
+# Sample each region sampling.n times with random coordinates
+randomize_region_coords = function(regions.gr, mm10.chr.sizes, sampling.n) {
+  chr.names.all = names(mm10.chr.sizes)
+  
+  chr.names.detected = stringr::str_detect(chr.names.all, "chr[0-9X]+$")
+  
+  chr.names = chr.names.all[chr.names.detected]
+  
+  chr.count = length(chr.names)
+  
+  random.regions.df = bind_rows(lapply(1:(length(regions.gr)),
+                                       function(i) {
+                                         region.length = end(regions.gr[i]) - start(regions.gr[i]) + 1
+                                         region.name = regions.gr[i]$name
+                                         return(bind_rows(lapply(1:sampling.n,
+                                                                 function(j) {
+                                                                   region.chr = sample(chr.names, size = 1)
+                                                                   region.start = sample(0:(mm10.chr.sizes[region.chr] - region.length), size = 1)
+                                                                   region.end = region.start + region.length - 1
+                                                                   return(data.frame(region.chr = region.chr,
+                                                                                     region.start = region.start,
+                                                                                     region.end = region.end,
+                                                                                     region.name = paste0(region.name, "_", j)))
+                                                                 })))
+                                       }))
+  
+  return(GRanges(seqnames = random.regions.df$region.chr,
+                 ranges = IRanges(start = random.regions.df$region.start,
+                                  end = random.regions.df$region.end),
+                 strand = rep(strand(regions.gr), sampling.n),
+                 name = random.regions.df$region.name,
+                 score = rep(regions.gr$score, sampling.n)))
 }
 
 # Define a function to calculate empirical p-values for PCCs:

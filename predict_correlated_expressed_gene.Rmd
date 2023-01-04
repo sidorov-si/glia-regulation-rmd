@@ -26,6 +26,8 @@ source("helper_functions.R")
 Define constants:
 
 ```{r, include=T}
+set.seed(10) # reproduce exactly the same sequence of pseudorandom numbers each run
+
 fdr.matches = 0.05
 
 expression.cutoff = 5 # min number of normalised reads
@@ -249,7 +251,6 @@ p1.corr.radius = calc_correlations(p1.vicinity.radius, p1.expr.tss.ranges,
                                    p1.norm.region.counts, p1.norm.gene.counts,
                                    p1.region.sample.names, p1.gene.sample.names,
                                    "p1",
-                                   "target",
                                    paste0("../r_results/predict_correlated_expressed_gene/p1_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
@@ -258,7 +259,6 @@ p2.corr.radius = calc_correlations(p2.vicinity.radius, p2.expr.tss.ranges,
                                    p2.norm.region.counts, p2.norm.gene.counts,
                                    p2.region.sample.names, p2.gene.sample.names,
                                    "p2",
-                                   "target",
                                    paste0("../r_results/predict_correlated_expressed_gene/p2_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
@@ -267,7 +267,6 @@ pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.expr.tss.ranges,
                                    pM.norm.region.counts, pM.norm.gene.counts,
                                    pM.region.sample.names, pM.gene.sample.names,
                                    "pM",
-                                   "target",
                                    paste0("../r_results/predict_correlated_expressed_gene/pM_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
@@ -276,14 +275,23 @@ pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.expr.tss.ranges,
 Generate background PCC distributions:
 
 ```{r, include=T}
-p1.bkgd.radius = calc_correlations(p1.vicinity.radius, p1.expr.tss.ranges,
+p1.dep.regions.random = randomize_region_coords(p1.dep.regions, mm10.chr.sizes, sampling.n = 2)
+
+p1.vicinity.radius.random = generate_vicinity_radius(p1.dep.regions.random, 
+                                                     vicinity.radius,
+                                                     paste0("../r_results/predict_correlated_expressed_gene/p1_random_vicinities_radius_", 
+                                                            vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                            "_min-baseMean", min.baseMean, ".bed"))
+
+p1.bkgd.radius = calc_correlations(p1.vicinity.radius.random, p1.expr.tss.ranges,
                                    p1.norm.region.counts, p1.norm.gene.counts,
                                    p1.region.sample.names, p1.gene.sample.names,
                                    "p1",
-                                   "background",
                                    paste0("../r_results/predict_correlated_expressed_gene/p1_bkgd_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
+
+# .. do the other two domains
 ```
 
 Draw the background absolute PCC distribution:
