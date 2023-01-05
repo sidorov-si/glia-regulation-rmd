@@ -159,8 +159,7 @@ calc_correlations = function(vicinity.gr, dep.tss,
                              region.sample.names, gene.sample.names,
                              domain.name, corr.rds.filename) {
   region.tss.shared.sample.names = intersect(region.sample.names, gene.sample.names)
-
-
+  
   tss.vicinity.hits = GenomicRanges::findOverlaps(query = dep.tss,
                                                   subject = vicinity.gr,
                                                   type = "within",
@@ -185,13 +184,15 @@ calc_correlations = function(vicinity.gr, dep.tss,
   vicinity.hits = data.frame(vicinity_num = subjectHits(tss.vicinity.hits)) %>%
     left_join(as.data.frame(vicinity.gr) %>%
                 rownames_to_column(var = "region_id") %>%
+                mutate(region_names = unlist(stringr::str_replace(region_id, "_[12]$", ""))) %>%
                 rownames_to_column(var = "vicinity_num") %>%
                 mutate(vicinity_num = as.integer(vicinity_num)) %>%
                 dplyr::select(vicinity_num,
+                              region_names,
                               region_id),
               by = c("vicinity_num" = "vicinity_num")) %>%
     left_join(norm.region.counts,
-              by = c("region_id" = "region_names")) %>%
+              by = c("region_names" = "region_names")) %>%
     dplyr::select(vicinity_num,
                   region_id,
                   all_of(sort(names(.)[names(.) %in% region.tss.shared.sample.names]))) %>%

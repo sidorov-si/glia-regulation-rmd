@@ -291,16 +291,53 @@ p1.bkgd.radius = calc_correlations(p1.vicinity.radius.random, p1.expr.tss.ranges
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
 
-# .. do the other two domains
+p2.dep.regions.random = randomize_region_coords(p2.dep.regions, mm10.chr.sizes, sampling.n = 2)
+
+p2.vicinity.radius.random = generate_vicinity_radius(p2.dep.regions.random,
+                                                     vicinity.radius,
+                                                     paste0("../r_results/predict_correlated_expressed_gene/p2_random_vicinities_radius_",
+                                                            vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                            "_min-baseMean", min.baseMean, ".bed"))
+
+p2.bkgd.radius = calc_correlations(p2.vicinity.radius.random, p2.expr.tss.ranges,
+                                   p2.norm.region.counts, p2.norm.gene.counts,
+                                   p2.region.sample.names, p2.gene.sample.names,
+                                   "p2",
+                                   paste0("../r_results/predict_correlated_expressed_gene/p2_bkgd_in_radius_",
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
+
+pM.dep.regions.random = randomize_region_coords(pM.dep.regions, mm10.chr.sizes, sampling.n = 2)
+
+pM.vicinity.radius.random = generate_vicinity_radius(pM.dep.regions.random,
+                                                     vicinity.radius,
+                                                     paste0("../r_results/predict_correlated_expressed_gene/pM_random_vicinities_radius_",
+                                                            vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                            "_min-baseMean", min.baseMean, ".bed"))
+
+pM.bkgd.radius = calc_correlations(pM.vicinity.radius.random, pM.expr.tss.ranges,
+                                   pM.norm.region.counts, pM.norm.gene.counts,
+                                   pM.region.sample.names, pM.gene.sample.names,
+                                   "pM",
+                                   paste0("../r_results/predict_correlated_expressed_gene/pM_bkgd_in_radius_",
+                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                          "_min-baseMean", min.baseMean, ".rds"))
 ```
 
-Draw the background absolute PCC distribution:
+Draw the background and the target distributions of the  absolute PCC values:
+
+...
 
 ```{r, include=T}
-p = ggplot(p1.bkgd.radius) +
-  geom_histogram(aes(x = abs_pcc), 
+p1.plot = p1.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc)) +
+  geom_histogram(binwidth = 0.05) +
+  geom_histogram(p1.corr.radius,
+                 aes(x = abs_pcc),
                  binwidth = 0.05) +
   theme_classic()
+
+p1.plot
 
 ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
