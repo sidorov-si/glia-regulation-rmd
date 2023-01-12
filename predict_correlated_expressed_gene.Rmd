@@ -324,70 +324,57 @@ pM.bkgd.radius = calc_correlations(pM.vicinity.radius.random, pM.expr.tss.ranges
                                           "_min-baseMean", min.baseMean, ".rds"))
 ```
 
-Draw the background and the target distributions of the  absolute PCC values:
-
-...
+Plot the background and the target distributions of the absolute PCC values:
 
 ```{r, include=T}
-p1.plot = p1.bkgd.radius %>%
-  ggplot(aes(x = abs_pcc)) +
-  geom_histogram(binwidth = 0.05) +
-  geom_histogram(p1.corr.radius,
-                 aes(x = abs_pcc),
-                 binwidth = 0.05) +
+p1.corr.bkgd.radius = p1.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(p1.bkgd.radius %>%
+              mutate(pair_type = "Background"))
+  
+p1.plot = p1.corr.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
   theme_classic()
 
-p1.plot
-
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_bkgd_in_radius_",
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_hist.pdf"),
-       plot = p)
+                         "_min-baseMean", min.baseMean, "_density.pdf"),
+       plot = p1.plot)
+
+p2.corr.bkgd.radius = p2.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(p2.bkgd.radius %>%
+              mutate(pair_type = "Background"))
+  
+p2.plot = p2.corr.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p2_corr_and_bkgd_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_density.pdf"),
+       plot = p2.plot)
+
+pM.corr.bkgd.radius = pM.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(pM.bkgd.radius %>%
+              mutate(pair_type = "Background"))
+  
+pM.plot = pM.corr.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_corr_and_bkgd_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_density.pdf"),
+       plot = pM.plot)
 ```
-
-Calculate and plot the other two background distributions:
-
-```{r, include=T}
-p2.bkgd.radius = calc_correlations(p2.vicinity.radius, p2.dep.tss.ranges,
-                                   p2.norm.region.counts, p2.norm.gene.counts,
-                                   p2.region.sample.names, p2.gene.sample.names,
-                                   "p2",
-                                   "background",
-                                   paste0("../r_results/predict_correlated_deg/p2_bkgd_in_radius_",
-                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
-
-pM.bkgd.radius = calc_correlations(pM.vicinity.radius, pM.dep.tss.ranges,
-                                   pM.norm.region.counts, pM.norm.gene.counts,
-                                   pM.region.sample.names, pM.gene.sample.names,
-                                   "pM",
-                                   "background",
-                                   paste0("../r_results/predict_correlated_deg/pM_bkgd_in_radius_",
-                                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
-
-p = ggplot(p2.bkgd.radius) +
-  geom_histogram(aes(x = abs_pcc), 
-                 binwidth = 0.05) +
-  theme_classic()
-
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p2_bkgd_in_radius_",
-                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_hist.pdf"),
-       plot = p)
-
-p = ggplot(pM.bkgd.radius) +
-  geom_histogram(aes(x = abs_pcc), 
-                 binwidth = 0.05) +
-  theme_classic()
-
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_bkgd_in_radius_",
-                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_hist.pdf"),
-       plot = p)
-```
-
-Interestingly, the 0.5 peak is not a universal feature of a background distribution of absolute PCCs, and a much bigger proportion of absolute PCCs is concentrated towards the highest end of the scale in p2 and pMN then in p1.
 
 Hereafter, I will use the term "PCC" for "absolute PCC."
 
@@ -405,13 +392,7 @@ p1.corr.radius.sign = p1.corr.radius %>%
   mutate(sign.padj = (padj < fdr))
 
 cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p1, radius:", nrow(p1.corr.radius.sign %>% filter(sign.padj)), "\n")
-```
 
-No significant region-gene associations.
-
-Calculate and correct p-values for PCCs in p2 and pMN:
-
-```{r, include=T}
 p2.corr.radius.sign = p2.corr.radius %>%
   rowwise() %>%
   mutate(pvalue = calc_empirical_pvalue(abs_pcc, p2.bkgd.radius)) %>%
@@ -433,302 +414,4 @@ pM.corr.radius.sign = pM.corr.radius %>%
 cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, radius:", nrow(pM.corr.radius.sign %>% filter(sign.padj)), "\n")
 ```
 
-Calculate background PCC distributions and empirical p-values in p1, p2 and pMN when using TADs as assignment areas:
-
-```{r, include=T}
-p1.bkgd.tad = calc_correlations(p1.vicinity.tad, p1.dep.tss.ranges,
-                                p1.norm.region.counts, p1.norm.gene.counts,
-                                p1.region.sample.names, p1.gene.sample.names,
-                                "p1",
-                                "background",
-                                paste0("../r_results/predict_correlated_deg/p1_bkgd_in_largest_tad_",
-                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                       "_min-baseMean", min.baseMean, ".rds"))
-
-p2.bkgd.tad = calc_correlations(p2.vicinity.tad, p2.dep.tss.ranges,
-                                p2.norm.region.counts, p2.norm.gene.counts,
-                                p2.region.sample.names, p2.gene.sample.names,
-                                "p2",
-                                "background",
-                                paste0("../r_results/predict_correlated_deg/p2_bkgd_in_largest_tad_",
-                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                       "_min-baseMean", min.baseMean, ".rds"))
-
-pM.bkgd.tad = calc_correlations(pM.vicinity.tad, pM.dep.tss.ranges,
-                                pM.norm.region.counts, pM.norm.gene.counts,
-                                pM.region.sample.names, pM.gene.sample.names,
-                                "pM",
-                                "background",
-                                paste0("../r_results/predict_correlated_deg/pM_bkgd_in_largest_tad_",
-                                       min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                       "_min-baseMean", min.baseMean, ".rds"))
-
-p = ggplot(p1.bkgd.tad) +
-  geom_histogram(aes(x = abs_pcc), 
-                 binwidth = 0.05) +
-  theme_classic()
-
-ggsave(filename = paste0("../r_results/predict_correlated_deg/p1_bkgd_in_largest_tad_",
-                         min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_hist.pdf"),
-       plot = p)
-
-p = ggplot(p2.bkgd.tad) +
-  geom_histogram(aes(x = abs_pcc), 
-                 binwidth = 0.05) +
-  theme_classic()
-
-ggsave(filename = paste0("../r_results/predict_correlated_deg/p2_bkgd_in_largest_tad_",
-                         min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_hist.pdf"),
-       plot = p)
-
-p = ggplot(pM.bkgd.tad) +
-  geom_histogram(aes(x = abs_pcc), 
-                 binwidth = 0.05) +
-  theme_classic()
-
-ggsave(filename = paste0("../r_results/predict_correlated_deg/pM_bkgd_in_largest_tad_",
-                         min.tad.size, "-", max.tad.size, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_hist.pdf"),
-       plot = p)
-
-p1.corr.tad.sign = p1.corr.tad %>%
-  rowwise() %>%
-  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p1.bkgd.tad)) %>%
-  ungroup() %>%
-  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
-  mutate(fdr = pcc.fdr) %>%
-  mutate(sign.padj = (padj < fdr))
-
-cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p1, TAD:", nrow(p1.corr.tad.sign %>% filter(sign.padj)), "\n")
-
-p2.corr.tad.sign = p2.corr.tad %>%
-  rowwise() %>%
-  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p2.bkgd.tad)) %>%
-  ungroup() %>%
-  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
-  mutate(fdr = pcc.fdr) %>%
-  mutate(sign.padj = (padj < fdr))
-
-cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p2, TAD:", nrow(p2.corr.tad.sign %>% filter(sign.padj)), "\n")
-
-pM.corr.tad.sign = pM.corr.tad %>%
-  rowwise() %>%
-  mutate(pvalue = calc_empirical_pvalue(abs_pcc, pM.bkgd.tad)) %>%
-  ungroup() %>%
-  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
-  mutate(fdr = pcc.fdr) %>%
-  mutate(sign.padj = (padj < fdr))
-
-cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, TAD:", nrow(pM.corr.tad.sign %>% filter(sign.padj)), "\n")
-```
-
-Try to lower the region selection cutoffs and see if any statistically significant region-gene associations (FDR = 5%) emerge. First, re-do the analysis with the strictest cutoffs to have all results in the same format:
-
-```{r, include=T}
-# # Set 1 (Joaquina's strictest cutoffs for NFIA-dependent regions)
-# fdr = 0.01
-# min.l2fc = 2 # Min log2(fold change)
-# min.baseMean = 100
-# 
-# assoc.list.1.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.1.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.1.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.1.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.1.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.1.tad.pM = assign_regions_to_genes("pM", "tad")
-# 
-# # Set 2
-# fdr = 0.01
-# min.l2fc = 2 # Min log2(fold change)
-# min.baseMean = 80
-# 
-# assoc.list.2.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.2.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.2.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.2.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.2.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.2.tad.pM = assign_regions_to_genes("pM", "tad")
-# 
-# # Set 3
-# fdr = 0.01
-# min.l2fc = 2 # Min log2(fold change)
-# min.baseMean = 60
-# 
-# assoc.list.3.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.3.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.3.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.3.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.3.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.3.tad.pM = assign_regions_to_genes("pM", "tad")
-# 
-# # Set 4
-# fdr = 0.01
-# min.l2fc = 2 # Min log2(fold change)
-# min.baseMean = 40
-# 
-# assoc.list.4.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.4.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.4.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.4.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.4.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.4.tad.pM = assign_regions_to_genes("pM", "tad")
-# 
-# # Set 5
-# fdr = 0.01
-# min.l2fc = 2 # Min log2(fold change)
-# min.baseMean = 20
-# 
-# assoc.list.5.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.5.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.5.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.5.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.5.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.5.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# Set 6 
-# fdr = 0.01
-# min.l2fc = 1.5 # Min log2(fold change)
-# min.baseMean = 20
-# 
-# assoc.list.6.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.6.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.6.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.6.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.6.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.6.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# Set 7 
-# fdr = 0.01
-# min.l2fc = 1 # Min log2(fold change)
-# min.baseMean = 20
-# 
-# assoc.list.7.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.7.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.7.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.7.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.7.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.7.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# # Set 8 
-# fdr = 0.01
-# min.l2fc = 0.5 # Min log2(fold change)
-# min.baseMean = 20
-# 
-# assoc.list.8.radius.p1 = assign_regions_to_genes("p1", "radius")
-# 
-# assoc.list.8.tad.p1 = assign_regions_to_genes("p1", "tad")
-# 
-# assoc.list.8.radius.p2 = assign_regions_to_genes("p2", "radius")
-# 
-# assoc.list.8.tad.p2 = assign_regions_to_genes("p2", "tad")
-# 
-# assoc.list.8.radius.pM = assign_regions_to_genes("pM", "radius")
-# 
-# assoc.list.8.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# Set 9 
-fdr = 0.02
-min.l2fc = 0.5 # Min log2(fold change)
-min.baseMean = 20
-
-assoc.list.9.radius.p1 = assign_regions_to_genes("p1", "radius")
-
-assoc.list.9.tad.p1 = assign_regions_to_genes("p1", "tad")
-
-assoc.list.9.radius.p2 = assign_regions_to_genes("p2", "radius")
-
-assoc.list.9.tad.p2 = assign_regions_to_genes("p2", "tad")
-
-assoc.list.9.radius.pM = assign_regions_to_genes("pM", "radius")
-
-assoc.list.9.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# Set 10 
-fdr = 0.03
-min.l2fc = 0.5 # Min log2(fold change)
-min.baseMean = 20
-
-assoc.list.10.radius.p1 = assign_regions_to_genes("p1", "radius")
-
-assoc.list.10.tad.p1 = assign_regions_to_genes("p1", "tad")
-
-assoc.list.10.radius.p2 = assign_regions_to_genes("p2", "radius")
-
-assoc.list.10.tad.p2 = assign_regions_to_genes("p2", "tad")
-
-assoc.list.10.radius.pM = assign_regions_to_genes("pM", "radius")
-
-assoc.list.10.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# Set 11 
-fdr = 0.04
-min.l2fc = 0.5 # Min log2(fold change)
-min.baseMean = 20
-
-assoc.list.11.radius.p1 = assign_regions_to_genes("p1", "radius")
-
-assoc.list.11.tad.p1 = assign_regions_to_genes("p1", "tad")
-
-assoc.list.11.radius.p2 = assign_regions_to_genes("p2", "radius")
-
-assoc.list.11.tad.p2 = assign_regions_to_genes("p2", "tad")
-
-assoc.list.11.radius.pM = assign_regions_to_genes("pM", "radius")
-
-assoc.list.11.tad.pM = assign_regions_to_genes("pM", "tad")
-
-# Set 12 
-fdr = 0.05
-min.l2fc = 0.5 # Min log2(fold change)
-min.baseMean = 20
-
-assoc.list.12.radius.p1 = assign_regions_to_genes("p1", "radius")
-
-assoc.list.12.tad.p1 = assign_regions_to_genes("p1", "tad")
-
-assoc.list.12.radius.p2 = assign_regions_to_genes("p2", "radius")
-
-assoc.list.12.tad.p2 = assign_regions_to_genes("p2", "tad")
-
-assoc.list.12.radius.pM = assign_regions_to_genes("pM", "radius")
-
-assoc.list.12.tad.pM = assign_regions_to_genes("pM", "tad")
-
-```
+No significant region-gene associations.
