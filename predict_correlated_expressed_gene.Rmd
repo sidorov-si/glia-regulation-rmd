@@ -275,13 +275,10 @@ pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.expr.tss.ranges,
 Generate background PCC distributions:
 
 ```{r, include=T}
-p1.dep.regions.random = randomize_region_coords(p1.dep.regions, mm10.chr.sizes, sampling.n = 2)
-
-p1.vicinity.radius.random = generate_vicinity_radius(p1.dep.regions.random, 
-                                                     vicinity.radius,
-                                                     paste0("../r_results/predict_correlated_expressed_gene/p1_random_vicinities_radius_", 
-                                                            vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
-                                                            "_min-baseMean", min.baseMean, ".bed"))
+p1.vicinity.radius.random = shuffle_regions_across_vicinities(p1.vicinity.radius, 
+                                                              paste0("../r_results/predict_correlated_expressed_gene/p1_random_vicinities_radius_", 
+                                                                      vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                                      "_min-baseMean", min.baseMean, ".bed"))
 
 p1.bkgd.radius = calc_correlations(p1.vicinity.radius.random, p1.expr.tss.ranges,
                                    p1.norm.region.counts, p1.norm.gene.counts,
@@ -291,13 +288,10 @@ p1.bkgd.radius = calc_correlations(p1.vicinity.radius.random, p1.expr.tss.ranges
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
 
-p2.dep.regions.random = randomize_region_coords(p2.dep.regions, mm10.chr.sizes, sampling.n = 2)
-
-p2.vicinity.radius.random = generate_vicinity_radius(p2.dep.regions.random,
-                                                     vicinity.radius,
-                                                     paste0("../r_results/predict_correlated_expressed_gene/p2_random_vicinities_radius_",
-                                                            vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                                            "_min-baseMean", min.baseMean, ".bed"))
+p2.vicinity.radius.random = shuffle_regions_across_vicinities(p2.vicinity.radius, 
+                                                              paste0("../r_results/predict_correlated_expressed_gene/p2_random_vicinities_radius_", 
+                                                                      vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                                      "_min-baseMean", min.baseMean, ".bed"))
 
 p2.bkgd.radius = calc_correlations(p2.vicinity.radius.random, p2.expr.tss.ranges,
                                    p2.norm.region.counts, p2.norm.gene.counts,
@@ -307,13 +301,10 @@ p2.bkgd.radius = calc_correlations(p2.vicinity.radius.random, p2.expr.tss.ranges
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, ".rds"))
 
-pM.dep.regions.random = randomize_region_coords(pM.dep.regions, mm10.chr.sizes, sampling.n = 2)
-
-pM.vicinity.radius.random = generate_vicinity_radius(pM.dep.regions.random,
-                                                     vicinity.radius,
-                                                     paste0("../r_results/predict_correlated_expressed_gene/pM_random_vicinities_radius_",
-                                                            vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                                            "_min-baseMean", min.baseMean, ".bed"))
+pM.vicinity.radius.random = shuffle_regions_across_vicinities(pM.vicinity.radius, 
+                                                              paste0("../r_results/predict_correlated_expressed_gene/pM_random_vicinities_radius_", 
+                                                                      vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                                      "_min-baseMean", min.baseMean, ".bed"))
 
 pM.bkgd.radius = calc_correlations(pM.vicinity.radius.random, pM.expr.tss.ranges,
                                    pM.norm.region.counts, pM.norm.gene.counts,
@@ -338,7 +329,7 @@ p1.plot = p1.corr.bkgd.radius %>%
   geom_density(alpha = 0.5) +
   theme_classic()
 
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p1_corr_and_bkgd_in_radius_",
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/p1_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                          "_min-baseMean", min.baseMean, "_density.pdf"),
        plot = p1.plot)
@@ -354,7 +345,7 @@ p2.plot = p2.corr.bkgd.radius %>%
   geom_density(alpha = 0.5) +
   theme_classic()
 
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/p2_corr_and_bkgd_in_radius_",
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/p2_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                          "_min-baseMean", min.baseMean, "_density.pdf"),
        plot = p2.plot)
@@ -370,7 +361,7 @@ pM.plot = pM.corr.bkgd.radius %>%
   geom_density(alpha = 0.5) +
   theme_classic()
 
-ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_corr_and_bkgd_in_radius_",
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/pM_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                          "_min-baseMean", min.baseMean, "_density.pdf"),
        plot = pM.plot)
@@ -378,7 +369,7 @@ ggsave(filename = paste0("../r_results/predict_correlated_deg/plots/pM_corr_and_
 
 Hereafter, I will use the term "PCC" for "absolute PCC."
 
-Overall, the background distributions suggest, that there will be no significant region-gene associations (because such associations would need to have extremely high PCCs), but let us check this.
+Overall, the target distributions and the background distributions look exactly the same, especially for the higher PCCs. But let us calculate adjusted p-values anyway.
 
 Calculate empirical p-values of PCCs:
 
@@ -414,4 +405,37 @@ pM.corr.radius.sign = pM.corr.radius %>%
 cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, radius:", nrow(pM.corr.radius.sign %>% filter(sign.padj)), "\n")
 ```
 
-No significant region-gene associations.
+Just single significant pairs:
+
+```{r, include=T}
+p1.corr.radius.sign %>%
+  filter(sign.padj)
+
+p2.corr.radius.sign %>%
+  filter(sign.padj)
+
+pM.corr.radius.sign %>%
+  filter(sign.padj)
+```
+
+There are only five significant region-gene pairs across the three domains. 
+
+A reason for the lack of significant region-gene pairs could be a high correlation of NFIA-dependent regions between each other so that they are interchangeable across vicinities. Let us check this hypothesis by calculating pairwise PCC distiributions between NFIA-dependent regions (here, PCCs are Pearson correlatin coefficients: -1..1):
+
+```{r, include=T}
+calc_and_plot_dep_region_pccs(p1.dep.regions,
+                              p1.norm.region.counts,
+                              "p1")
+
+calc_and_plot_dep_region_pccs(p2.dep.regions,
+                              p2.norm.region.counts,
+                              "p2")
+
+calc_and_plot_dep_region_pccs(pM.dep.regions,
+                              pM.norm.region.counts,
+                              "pM")
+```
+Indeed, pairwise PCCs of NFIA-dependent regions in each domain are very high. Consequently, the regions are indeed interchangeable, and shuffling them around vicinities will not give a meaningful background.
+
+
+

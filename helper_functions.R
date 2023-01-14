@@ -230,38 +230,13 @@ calc_correlations = function(vicinity.gr, dep.tss,
   return(vicinity.tss.corr.final)
 }
 
-# Sample each region sampling.n times with random coordinates
-randomize_region_coords = function(regions.gr, mm10.chr.sizes, sampling.n) {
-  chr.names.all = names(mm10.chr.sizes)
+# Shuffle region names across vicinities
+shuffle_regions_across_vicinities = function(p.vicinity.radius, output.filename) {
+  names(p.vicinity.radius) = sample(names(p.vicinity.radius))
   
-  chr.names.detected = stringr::str_detect(chr.names.all, "chr[0-9X]+$")
+  export(p.vicinity.radius, output.filename)
   
-  chr.names = chr.names.all[chr.names.detected]
-  
-  chr.count = length(chr.names)
-  
-  random.regions.df = bind_rows(lapply(1:(length(regions.gr)),
-                                       function(i) {
-                                         region.length = end(regions.gr[i]) - start(regions.gr[i]) + 1
-                                         region.name = regions.gr[i]$name
-                                         return(bind_rows(lapply(1:sampling.n,
-                                                                 function(j) {
-                                                                   region.chr = sample(chr.names, size = 1)
-                                                                   region.start = sample(0:(mm10.chr.sizes[region.chr] - region.length), size = 1)
-                                                                   region.end = region.start + region.length - 1
-                                                                   return(data.frame(region.chr = region.chr,
-                                                                                     region.start = region.start,
-                                                                                     region.end = region.end,
-                                                                                     region.name = paste0(region.name, "_", j)))
-                                                                 })))
-                                       }))
-  
-  return(GRanges(seqnames = random.regions.df$region.chr,
-                 ranges = IRanges(start = random.regions.df$region.start,
-                                  end = random.regions.df$region.end),
-                 strand = rep(strand(regions.gr), sampling.n),
-                 name = random.regions.df$region.name,
-                 score = rep(regions.gr$score, sampling.n)))
+  return(p.vicinity.radius)
 }
 
 # Calculate empirical p-values for target PCCs
@@ -269,3 +244,30 @@ calc_empirical_pvalue = function(abs.pcc, bkgd.df) {
   return(nrow(bkgd.df %>% filter(abs_pcc >= abs.pcc)) / nrow(bkgd.df))
 }
 
+# Calculate and plot pairwise PCCs between NFIA-dependent regions
+calc_and_plot_dep_region_pccs = function(dep.regions,
+                                         norm.region.counts,
+                                         domain.name) {
+  dep.region.norm.counts.transp = norm.region.counts %>% 
+    filter(region_names %in% dep.regions$name) %>%
+    column_to_rownames(var = "region_names") %>% 
+    t()
+  
+  norm.region.counts.transp.cor = cor(dep.region.norm.counts.transp, method = "pearson")
+  
+  dep.region.cor.plot = data.frame(region_pcc = norm.region.counts.transp.cor[upper.tri(norm.region.counts.transp.cor)]) %>%
+    ggplot(aes(x = region_pcc)) +
+    geom_density(fill = "grey") +
+    scale_x_continuous(limits = c(-1, 1)) + #,
+                       #breaks = breaks_pretty(n = 20)) +
+    theme_classic()
+  
+  ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/", 
+                           domain.name, "_dep_regions_corr",
+                           "_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                           "_min-baseMean", min.baseMean, "_density.pdf"),
+         plot = dep.region.cor.plot)
+  
+  cat("The number of pairwise PCCs between NFIA-dependent regions in", domain.name, ":", 
+      length(norm.region.counts.transp.cor[upper.tri(norm.region.counts.transp.cor)]), "\n")
+}
