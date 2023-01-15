@@ -117,6 +117,17 @@ generate_tss_annot = function(p.genes, mm10.annot.genes, p.tss.filename) {
   return(p.tss.ranges)
 }
 
+# Calculate and plot the distribution of distance between NFIA-dependent region and the closest TSS (strand ignored)
+calc_and_plot_dist_distributions = function(dep.regions, expr.tss.ranges, domain.name) {
+  dist.hits.obj = distanceToNearest(dep.regions, expr.tss.ranges, ignore.strand = T)
+  
+  dist.vector = mcols(dist.hits.obj)$distance
+  
+  cat("The number of NFIA-dependent regions in promoters (<= 1 kbp from a TSS; strand ignored):", 
+      length(dist.vector[dist.vector <= 1000]),
+      "(", round(length(dist.vector[dist.vector <= 1000]) / length(dist.vector) * 100, 2), "% )\n")
+}
+
 # Generate the region-gene assignment area around a region as a vicinity of a fixed radius (in kbp)
 generate_vicinity_radius = function(dep.regions, vicinity.radius, vicinity.ranges.bed.filename) {
   vicinity.radius = vicinity.radius * 1000
@@ -271,3 +282,22 @@ calc_and_plot_dep_region_pccs = function(dep.regions,
   cat("The number of pairwise PCCs between NFIA-dependent regions in", domain.name, ":", 
       length(norm.region.counts.transp.cor[upper.tri(norm.region.counts.transp.cor)]), "\n")
 }
+
+# Count expressed genes whose TSS(s) are inside a radius-defined vicinity of a least one NFIA-dependent region
+count_expr_genes_inside_vicinity = function(dep.regions, expr.tss.ranges, vicinity.radius) {
+  dep.regions.vicinity.radius = generate_vicinity_radius(dep.regions, 
+                                                         vicinity.radius,
+                                                         paste0("../r_results/predict_correlated_expressed_gene/p1_vicinities_radius_", 
+                                                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
+                                                                "_min-baseMean", min.baseMean, ".bed"))
+  
+  overlaps.hits.obj = findOverlaps(expr.tss.ranges, 
+                                   dep.regions.vicinity.radius,
+                                   select = "all",
+                                   ignore.strand = T)
+  
+  expr.genes.inside = unique(expr.tss.ranges$gene_name[unique(queryHits(overlaps.hits.obj))])
+  
+  return(length(expr.genes.inside))
+}
+

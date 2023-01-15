@@ -210,6 +210,18 @@ pM.expr.tss.ranges = generate_tss_annot(pM.expr.genes,
                                         "../r_results/predict_correlated_expressed_gene/pM_expr_genes_tss.bed")
 ```
 
+Calculate and plot the distribution of distances between NFIA-dependent regions and the closest expressed TSSs (on the same strand) to make sure that regions are mostly enhancers, as it would make sense to analyse promoters (regions overlapping TSSs) separately:
+
+```{r, include=T}
+calc_and_plot_dist_distributions(p1.dep.regions, p1.expr.tss.ranges, "p1")
+
+calc_and_plot_dist_distributions(p2.dep.regions, p2.expr.tss.ranges, "p2")
+
+calc_and_plot_dist_distributions(pM.dep.regions, pM.expr.tss.ranges, "pM")
+```
+
+Up to 2% of NFIA-dependent regions are in core or proximal promoters, hence I will need to analyse them separately (and, probably, to assign them to the closest expressed TSS). For now, I continue to analyse all NFIA-dependent regions together, as the proportion of promoter ones is very small in any of the three domains.
+
 Upload mm10 chromosome sizes:
 
 ```{r, include=T}
@@ -436,6 +448,49 @@ calc_and_plot_dep_region_pccs(pM.dep.regions,
                               "pM")
 ```
 Indeed, pairwise PCCs of NFIA-dependent regions in each domain are very high. Consequently, the regions are indeed interchangeable, and shuffling them around vicinities will not give a meaningful background.
+
+Let us try another background then: Choose a random new place for each NFIA-dependent region so that its new vicinity does not overlap with the real target vicinities. In this way, I will calculate the correlation of the region's accessibility with the expression of genes which presumably are not regulated by any of the NFIA-dependent regions (enhancers). To make this work, I may need to decrease the vicinity radii and to sample each vicinity several times to have at least the same number of region-gene correlations as in the target distributions (random vicinities that are placed outside of real vicinities may not have enough expressed genes).
+
+First, for different vicinity radii, count expressed genes in and outside the vicinities:
+
+```{r, include=T}
+p1.expr.genes.n = length(p1.expr.genes)
+
+p2.expr.genes.n = length(p2.expr.genes)
+
+pM.expr.genes.n = length(pM.expr.genes)
+
+# vicinity.radii = c(500, 450, 400, 350, 300, 250, 200, 150, 100) # kbp
+
+p1.expr.in.vicinity = count_expr_genes_inside_vicinity(p1.dep.regions, p1.expr.tss.ranges, 500)
+
+p2.expr.in.vicinity = count_expr_genes_inside_vicinity(p2.dep.regions, p2.expr.tss.ranges, 500)
+
+pM.expr.in.vicinity = count_expr_genes_inside_vicinity(pM.dep.regions, pM.expr.tss.ranges, 500)
+
+cat("The number of expressed genes outside of 500-kbp vicinities in p1:",
+    p1.expr.genes.n - p1.expr.in.vicinity,
+    "(", round((p1.expr.genes.n - p1.expr.in.vicinity) / p1.expr.genes.n * 100, 2), "%)\n")
+
+cat("The number of expressed genes outside of 500-kbp vicinities in p2:",
+    p2.expr.genes.n - p2.expr.in.vicinity,
+    "(", round((p2.expr.genes.n - p2.expr.in.vicinity) / p2.expr.genes.n * 100, 2), "%)\n")
+
+cat("The number of expressed genes outside of 500-kbp vicinities in pM:",
+    pM.expr.genes.n - pM.expr.in.vicinity,
+    "(", round((pM.expr.genes.n - pM.expr.in.vicinity) / pM.expr.genes.n * 100, 2), "%)\n")
+
+# p1.expr.genes.inside.ns = unlist(lapply(vicinity.radii,
+#                                         function(r) {
+#                                           count_expr_genes_inside_vicinity(p1.dep.regions,
+#                                                                            p1.expr.tss.ranges,
+#                                                                            r)
+#                                         }))
+```
+
+Hence, around a half (or many more, in the case of p1) expressed genes are outside vicinities, so there should be enough expressed genes from the background calculations. I shuffled the 500-kbp vicinities using `bedtools shuffle` (BEDTools `v2.30.0`) so that the randomly placed vicinities do not overlap the original vicinities and do not overlap each other. A command template is as follows:
+
+
 
 
 
