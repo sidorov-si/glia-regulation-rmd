@@ -45,6 +45,23 @@ generate_norm_gene_counts = function(master.table, domain.name) {
   return(p.norm.gene.counts)
 }
 
+# Calculate z-scores per feature across samples
+generate_scaled_counts = function(count.df, annot.col.name) {
+  rownames(count.df) = NULL
+  
+  count.df.clean = count.df %>%
+    column_to_rownames(var = annot.col.name)
+  
+  count.df.clean.scaled = as.data.frame(t(apply(count.df.clean, 1, scale)))
+  
+  names(count.df.clean.scaled) = names(count.df.clean)
+  
+  count.df.clean.final = count.df.clean.scaled %>%
+    rownames_to_column(var = annot.col.name)
+  
+  return(count.df.clean.final)
+}
+
 # Wrapper function for DESeq2 accessibility normalisation
 generate_norm_chrom_counts = function(master.table, region.annot, domain.name) {
   p.region.sample.names = unlist(stringr::str_match_all(names(master.table), paste0("WT_D[179]+_", domain.name, ".*")))
@@ -118,7 +135,7 @@ generate_tss_annot = function(p.genes, mm10.annot.genes, p.tss.filename) {
 }
 
 # Calculate and plot the distribution of distance between NFIA-dependent region and the closest TSS (strand ignored)
-calc_and_plot_dist_distributions = function(dep.regions, expr.tss.ranges, domain.name) {
+calc_dist_distributions = function(dep.regions, expr.tss.ranges, domain.name) {
   dist.hits.obj = distanceToNearest(dep.regions, expr.tss.ranges, ignore.strand = T)
   
   dist.vector = mcols(dist.hits.obj)$distance
@@ -195,7 +212,7 @@ calc_correlations = function(vicinity.gr, dep.tss,
   vicinity.hits = data.frame(vicinity_num = subjectHits(tss.vicinity.hits)) %>%
     left_join(as.data.frame(vicinity.gr) %>%
                 rownames_to_column(var = "region_id") %>%
-                mutate(region_names = unlist(stringr::str_replace(region_id, "_[12]$", ""))) %>%
+                mutate(region_names = unlist(stringr::str_replace(region_id, "\\.[1-9]+$", ""))) %>%
                 rownames_to_column(var = "vicinity_num") %>%
                 mutate(vicinity_num = as.integer(vicinity_num)) %>%
                 dplyr::select(vicinity_num,
@@ -284,13 +301,7 @@ calc_and_plot_dep_region_pccs = function(dep.regions,
 }
 
 # Count expressed genes whose TSS(s) are inside a radius-defined vicinity of a least one NFIA-dependent region
-count_expr_genes_inside_vicinity = function(dep.regions, expr.tss.ranges, vicinity.radius) {
-  dep.regions.vicinity.radius = generate_vicinity_radius(dep.regions, 
-                                                         vicinity.radius,
-                                                         paste0("../r_results/predict_correlated_expressed_gene/p1_vicinities_radius_", 
-                                                                vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc, 
-                                                                "_min-baseMean", min.baseMean, ".bed"))
-  
+count_expr_genes_inside_vicinity = function(dep.regions.vicinity.radius, expr.tss.ranges) {
   overlaps.hits.obj = findOverlaps(expr.tss.ranges, 
                                    dep.regions.vicinity.radius,
                                    select = "all",
@@ -301,3 +312,27 @@ count_expr_genes_inside_vicinity = function(dep.regions, expr.tss.ranges, vicini
   return(length(expr.genes.inside))
 }
 
+# Make sampling.n copies of each vicinity in a GRanges object p1.vicinity.radius
+multiply_vicinities = function(vicinity.gr, sampling.n, output.filename) {
+  vicinity.gr.mult = unlist(as(lapply(1:sampling.n,
+                                      function(i) {
+                                        names(vicinity.gr) = paste0(names(vicinity.gr), ".", i)
+                                        return(vicinity.gr)
+                                      }), 
+                               "GRangesList"))
+  
+  export(vicinity.gr.mult, output.filename)
+  
+  return(vicinity.gr.mult)
+}
+
+# Re-format a vicinity GRanges read from a BED file
+trim_vicinity_gr = function(vicinity.gr) {
+  names(vicinity.gr) = vicinity.gr$name
+  
+  vicinity.gr$name = NULL
+  
+  vicinity.gr$score = NULL
+  
+  return(vicinity.gr)
+}

@@ -28,6 +28,11 @@ Define constants:
 ```{r, include=T}
 set.seed(10) # reproduce exactly the same sequence of pseudorandom numbers each run
 
+# Parameters for choosing significantly regulated regions
+fdr = 0.01
+min.l2fc = 1 # Min log2(fold change)
+min.baseMean = 20
+
 fdr.matches = 0.05
 
 expression.cutoff = 5 # min number of normalised reads
@@ -37,6 +42,8 @@ pass.count.cutoff = 2 # min number of RNA-seq samples with at least expression.c
 vicinity.radius = 500 # kbp
 
 pcc.fdr = 0.05
+
+vicinity.sampling.n = 5 # 3
 ```
 
 Define cutoff sets:
@@ -67,11 +74,37 @@ gene.names = rownames(master.table)
 Normalise gene expression across replicates using DESeq2:
 
 ```{r, include=T}
-p1.norm.gene.counts = generate_norm_gene_counts(master.table, "p1")
+p1.norm.gene.counts.deseq2 = generate_norm_gene_counts(master.table, "p1")
 
-p2.norm.gene.counts = generate_norm_gene_counts(master.table, "p2")
+p2.norm.gene.counts.deseq2 = generate_norm_gene_counts(master.table, "p2")
 
-pM.norm.gene.counts = generate_norm_gene_counts(master.table, "pM")
+pM.norm.gene.counts.deseq2 = generate_norm_gene_counts(master.table, "pM")
+```
+
+Select expressed genes:
+
+```{r, include=T}
+p1.expr.genes = select_expressed_genes(p1.norm.gene.counts.deseq2)
+
+p2.expr.genes = select_expressed_genes(p2.norm.gene.counts.deseq2)
+
+pM.expr.genes = select_expressed_genes(pM.norm.gene.counts.deseq2)
+
+cat("Number of expressed genes in p1 ( expression.cutoff =", expression.cutoff, "):", length(p1.expr.genes), "\n")
+
+cat("Number of expressed genes in p2 ( expression.cutoff =", expression.cutoff, "):", length(p2.expr.genes), "\n")
+
+cat("Number of expressed genes in pM ( expression.cutoff =", expression.cutoff, "):", length(pM.expr.genes), "\n")
+```
+
+Scale the normalised expression counts (calculate z-scores) of expressed genes:
+
+```{r, include=T}
+p1.norm.gene.counts = generate_scaled_counts(p1.norm.gene.counts.deseq2[p1.norm.gene.counts.deseq2$gene_names %in% p1.expr.genes, ], "gene_names")
+
+p2.norm.gene.counts = generate_scaled_counts(p2.norm.gene.counts.deseq2[p2.norm.gene.counts.deseq2$gene_names %in% p2.expr.genes, ], "gene_names")
+
+pM.norm.gene.counts = generate_scaled_counts(pM.norm.gene.counts.deseq2[pM.norm.gene.counts.deseq2$gene_names %in% pM.expr.genes, ], "gene_names")
 ```
 
 Write down the RNA-seq sample names:
@@ -112,11 +145,21 @@ region.annot = master.table %>%
 Normalise chromatin accessibility across replicates using DESeq2:
 
 ```{r, include=T}
-p1.norm.region.counts = generate_norm_chrom_counts(master.table, region.annot, "p1")
+p1.norm.region.counts.deseq2 = generate_norm_chrom_counts(master.table, region.annot, "p1")
 
-p2.norm.region.counts = generate_norm_chrom_counts(master.table, region.annot, "p2")
+p2.norm.region.counts.deseq2 = generate_norm_chrom_counts(master.table, region.annot, "p2")
 
-pM.norm.region.counts = generate_norm_chrom_counts(master.table, region.annot, "pM")
+pM.norm.region.counts.deseq2 = generate_norm_chrom_counts(master.table, region.annot, "pM")
+```
+
+Scale the normalised region accessibility (calculate z-scores):
+
+```{r, include=T}
+p1.norm.region.counts = generate_scaled_counts(p1.norm.region.counts.deseq2, "region_names")
+
+p2.norm.region.counts = generate_scaled_counts(p2.norm.region.counts.deseq2, "region_names")
+
+pM.norm.region.counts = generate_scaled_counts(pM.norm.region.counts.deseq2, "region_names")
 ```
 
 Write down the ATAC-seq sample names:
@@ -138,11 +181,6 @@ rm(master.table)
 Upload sets of NFIA-dependent regions:
 
 ```{r, include=T}
-# Joaquina's parameters for choosing significantly regulated regions
-fdr = 0.01
-min.l2fc = 2 # Min log2(fold change)
-min.baseMean = 100
-
 p1.dep.regions = import(paste0("../r_results/select_diff_regions/p1_dep_ranges", 
                                "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
                                ".bed"))
@@ -154,6 +192,16 @@ p2.dep.regions = import(paste0("../r_results/select_diff_regions/p2_dep_ranges",
 pM.dep.regions = import(paste0("../r_results/select_diff_regions/pM_dep_ranges", 
                                "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean,
                                ".bed"))
+```
+
+Print the number of NFIA-dependet regions:
+
+```{r, include=T}
+cat("Number of NFIA-dependent regions in p1:", length(p1.dep.regions$name), "\n")
+
+cat("Number of NFIA-dependent regions in p2:", length(p2.dep.regions$name), "\n")
+
+cat("Number of NFIA-dependent regions in pM:", length(pM.dep.regions$name), "\n")
 ```
 
 Upload the genome annotation for mm10 that was used for the expression quantification analysis:
@@ -178,22 +226,6 @@ mm10.annot.genes = mm10.tx %>%
             by = c("tx_name" = "tx_name"))
 ```
 
-Select expressed genes:
-
-```{r, include=T}
-p1.expr.genes = select_expressed_genes(p1.norm.gene.counts)
-
-p2.expr.genes = select_expressed_genes(p2.norm.gene.counts)
-
-pM.expr.genes = select_expressed_genes(pM.norm.gene.counts)
-
-cat("Number of expressed genes in p1 ( expression.cutoff =", expression.cutoff, "):", length(p1.expr.genes), "\n")
-
-cat("Number of expressed genes in p2 ( expression.cutoff =", expression.cutoff, "):", length(p2.expr.genes), "\n")
-
-cat("Number of expressed genes in pM ( expression.cutoff =", expression.cutoff, "):", length(pM.expr.genes), "\n")
-```
-
 Generate genomic ranges for the TSSs of the expressed genes:
 
 ```{r, include=T}
@@ -210,14 +242,14 @@ pM.expr.tss.ranges = generate_tss_annot(pM.expr.genes,
                                         "../r_results/predict_correlated_expressed_gene/pM_expr_genes_tss.bed")
 ```
 
-Calculate and plot the distribution of distances between NFIA-dependent regions and the closest expressed TSSs (on the same strand) to make sure that regions are mostly enhancers, as it would make sense to analyse promoters (regions overlapping TSSs) separately:
+Calculate the distribution of distances between NFIA-dependent regions and the closest expressed TSSs (on the same strand) to make sure that regions are mostly enhancers, as it would make sense to analyse promoters (regions overlapping TSSs) separately:
 
 ```{r, include=T}
-calc_and_plot_dist_distributions(p1.dep.regions, p1.expr.tss.ranges, "p1")
+calc_dist_distributions(p1.dep.regions, p1.expr.tss.ranges, "p1")
 
-calc_and_plot_dist_distributions(p2.dep.regions, p2.expr.tss.ranges, "p2")
+calc_dist_distributions(p2.dep.regions, p2.expr.tss.ranges, "p2")
 
-calc_and_plot_dist_distributions(pM.dep.regions, pM.expr.tss.ranges, "pM")
+calc_dist_distributions(pM.dep.regions, pM.expr.tss.ranges, "pM")
 ```
 
 Up to 2% of NFIA-dependent regions are in core or proximal promoters, hence I will need to analyse them separately (and, probably, to assign them to the closest expressed TSS). For now, I continue to analyse all NFIA-dependent regions together, as the proportion of promoter ones is very small in any of the three domains.
@@ -423,11 +455,38 @@ Just single significant pairs:
 p1.corr.radius.sign %>%
   filter(sign.padj)
 
+write.table(p1.corr.radius.sign,
+            file = paste0("../r_results/predict_correlated_expressed_gene/p1_corr_radius_sign_shuffled_",
+                          "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                          "_min-baseMean", min.baseMean, ".tsv"),
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = F)
+
 p2.corr.radius.sign %>%
   filter(sign.padj)
 
+write.table(p2.corr.radius.sign,
+            file = paste0("../r_results/predict_correlated_expressed_gene/p2_corr_radius_sign_shuffled_",
+                          "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                          "_min-baseMean", min.baseMean, ".tsv"),
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = F)
+
 pM.corr.radius.sign %>%
   filter(sign.padj)
+
+write.table(pM.corr.radius.sign,
+            file = paste0("../r_results/predict_correlated_expressed_gene/pM_corr_radius_sign_shuffled_",
+                          "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                          "_min-baseMean", min.baseMean, ".tsv"),
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = F)
 ```
 
 There are only five significant region-gene pairs across the three domains. 
@@ -447,6 +506,7 @@ calc_and_plot_dep_region_pccs(pM.dep.regions,
                               pM.norm.region.counts,
                               "pM")
 ```
+
 Indeed, pairwise PCCs of NFIA-dependent regions in each domain are very high. Consequently, the regions are indeed interchangeable, and shuffling them around vicinities will not give a meaningful background.
 
 Let us try another background then: Choose a random new place for each NFIA-dependent region so that its new vicinity does not overlap with the real target vicinities. In this way, I will calculate the correlation of the region's accessibility with the expression of genes which presumably are not regulated by any of the NFIA-dependent regions (enhancers). To make this work, I may need to decrease the vicinity radii and to sample each vicinity several times to have at least the same number of region-gene correlations as in the target distributions (random vicinities that are placed outside of real vicinities may not have enough expressed genes).
@@ -460,13 +520,11 @@ p2.expr.genes.n = length(p2.expr.genes)
 
 pM.expr.genes.n = length(pM.expr.genes)
 
-# vicinity.radii = c(500, 450, 400, 350, 300, 250, 200, 150, 100) # kbp
+p1.expr.in.vicinity = count_expr_genes_inside_vicinity(p1.vicinity.radius, p1.expr.tss.ranges)
 
-p1.expr.in.vicinity = count_expr_genes_inside_vicinity(p1.dep.regions, p1.expr.tss.ranges, 500)
+p2.expr.in.vicinity = count_expr_genes_inside_vicinity(p2.vicinity.radius, p2.expr.tss.ranges)
 
-p2.expr.in.vicinity = count_expr_genes_inside_vicinity(p2.dep.regions, p2.expr.tss.ranges, 500)
-
-pM.expr.in.vicinity = count_expr_genes_inside_vicinity(pM.dep.regions, pM.expr.tss.ranges, 500)
+pM.expr.in.vicinity = count_expr_genes_inside_vicinity(pM.vicinity.radius, pM.expr.tss.ranges)
 
 cat("The number of expressed genes outside of 500-kbp vicinities in p1:",
     p1.expr.genes.n - p1.expr.in.vicinity,
@@ -479,18 +537,233 @@ cat("The number of expressed genes outside of 500-kbp vicinities in p2:",
 cat("The number of expressed genes outside of 500-kbp vicinities in pM:",
     pM.expr.genes.n - pM.expr.in.vicinity,
     "(", round((pM.expr.genes.n - pM.expr.in.vicinity) / pM.expr.genes.n * 100, 2), "%)\n")
-
-# p1.expr.genes.inside.ns = unlist(lapply(vicinity.radii,
-#                                         function(r) {
-#                                           count_expr_genes_inside_vicinity(p1.dep.regions,
-#                                                                            p1.expr.tss.ranges,
-#                                                                            r)
-#                                         }))
 ```
 
-Hence, around a half (or many more, in the case of p1) expressed genes are outside vicinities, so there should be enough expressed genes from the background calculations. I shuffled the 500-kbp vicinities using `bedtools shuffle` (BEDTools `v2.30.0`) so that the randomly placed vicinities do not overlap the original vicinities and do not overlap each other. A command template is as follows:
+Hence, around a half (or many more, in the case of p1) expressed genes are outside vicinities, so there should be enough expressed genes from the background calculations.
 
+First, multiply each set of vicinities `vicinity.sampling.n` times to collect at least as many background region-gene pairs as in the target distribution (just one sampling gave fewer than a half of pairs for p1, for example):
 
+```{r, include=T}
+p1.vicinity.radius.mult = multiply_vicinities(p1.vicinity.radius, vicinity.sampling.n,
+                                              paste0("../r_results/predict_correlated_expressed_gene/p1_vicinities_radius_", 
+                                                     vicinity.radius, "kbp_mult_", vicinity.sampling.n, "_dep_regions_fdr", fdr, 
+                                                     "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".bed"))
 
+p2.vicinity.radius.mult = multiply_vicinities(p2.vicinity.radius, vicinity.sampling.n,
+                                              paste0("../r_results/predict_correlated_expressed_gene/p2_vicinities_radius_", 
+                                                     vicinity.radius, "kbp_mult_", vicinity.sampling.n, "_dep_regions_fdr", fdr, 
+                                                     "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".bed"))
 
+pM.vicinity.radius.mult = multiply_vicinities(pM.vicinity.radius, vicinity.sampling.n,
+                                              paste0("../r_results/predict_correlated_expressed_gene/pM_vicinities_radius_", 
+                                                     vicinity.radius, "kbp_mult_", vicinity.sampling.n, "_dep_regions_fdr", fdr, 
+                                                     "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".bed"))
+```
+
+I shuffled the 500-kbp vicinities using `bedtools shuffle` (BEDTools `v2.30.0`) so that the randomly placed vicinities do not overlap the original vicinities. A command for p1 is as follows (and commands for p2 and pM are the same):
+
+```
+time bedtools shuffle \
+    -i p1_vicinities_radius_500kbp_mult_3_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed \
+    -g ../../input/mm10.chrom.sizes \
+    -excl p1_vicinities_radius_500kbp_mult_3_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed \
+    -seed 128 \
+    -f 0 > \
+    p1_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed
+```
+
+All the three commands in total took less than a second on `Intel Xeon CPU E5-2640 v3 @ 2.60GHz` (no explicit parallelization).
+
+This command should be run in `r_results/predict_correlated_expressed_gene`.
+
+Generate new background PCC distributions:
+
+```{r, include=T}
+# p1.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+#                                                  "p1_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed"))
+# 
+# p2.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+#                                                  "p2_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed"))
+# 
+# pM.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+#                                                  "pM_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed"))
+
+# p1.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+#                                                  "p1_random_placed_vicinities_radius_250kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed"))
+# 
+# p2.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+#                                                  "p2_random_placed_vicinities_radius_250kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed"))
+# 
+# pM.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+#                                                  "pM_random_placed_vicinities_radius_250kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean100.bed"))
+
+p1.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+                                                 "p1_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean40.bed"))
+
+p2.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+                                                 "p2_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean40.bed"))
+
+pM.vicinity.radius.random.placed = import(paste0("../r_results/predict_correlated_expressed_gene/", 
+                                                 "pM_random_placed_vicinities_radius_500kbp_dep_regions_fdr0.01_min-l2fc2_min-baseMean40.bed"))
+
+p1.vicinity.radius.random.placed = trim_vicinity_gr(p1.vicinity.radius.random.placed)
+
+p2.vicinity.radius.random.placed = trim_vicinity_gr(p2.vicinity.radius.random.placed)
+
+pM.vicinity.radius.random.placed = trim_vicinity_gr(pM.vicinity.radius.random.placed)
+
+p1.bkgd.radius.placed = calc_correlations(p1.vicinity.radius.random.placed, p1.expr.tss.ranges,
+                                          p1.norm.region.counts, p1.norm.gene.counts,
+                                          p1.region.sample.names, p1.gene.sample.names,
+                                          "p1",
+                                          paste0("../r_results/predict_correlated_expressed_gene/p1_bkgd_placed_in_radius_",
+                                                 vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                 "_min-baseMean", min.baseMean, ".rds"))
+
+p2.bkgd.radius.placed = calc_correlations(p2.vicinity.radius.random.placed, p2.expr.tss.ranges,
+                                          p2.norm.region.counts, p2.norm.gene.counts,
+                                          p2.region.sample.names, p2.gene.sample.names,
+                                          "p2",
+                                          paste0("../r_results/predict_correlated_expressed_gene/p2_bkgd_placed_in_radius_",
+                                                 vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                 "_min-baseMean", min.baseMean, ".rds"))
+
+pM.bkgd.radius.placed = calc_correlations(pM.vicinity.radius.random.placed, pM.expr.tss.ranges,
+                                          pM.norm.region.counts, pM.norm.gene.counts,
+                                          pM.region.sample.names, pM.gene.sample.names,
+                                          "pM",
+                                          paste0("../r_results/predict_correlated_expressed_gene/pM_bkgd_placed_in_radius_",
+                                                 vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                 "_min-baseMean", min.baseMean, ".rds"))
+```
+
+Plot the background and the target distributions of the absolute PCC values:
+
+```{r, include=T}
+p1.corr.bkgd.radius.placed = p1.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(p1.bkgd.radius.placed %>%
+              mutate(pair_type = "Background"))
+  
+p1.plot.placed = p1.corr.bkgd.radius.placed %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/p1_corr_and_bkgd_placed_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_density.pdf"),
+       plot = p1.plot.placed)
+
+p2.corr.bkgd.radius.placed = p2.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(p2.bkgd.radius.placed %>%
+              mutate(pair_type = "Background"))
+  
+p2.plot.placed = p2.corr.bkgd.radius.placed %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/p2_corr_and_bkgd_placed_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_density.pdf"),
+       plot = p2.plot.placed)
+
+pM.corr.bkgd.radius.placed = pM.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(pM.bkgd.radius.placed %>%
+              mutate(pair_type = "Background"))
+  
+pM.plot.placed = pM.corr.bkgd.radius.placed %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/pM_corr_and_bkgd_placed_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_density.pdf"),
+       plot = pM.plot.placed)
+```
+
+Overall, the target distributions and the background distributions look almost the same, but the target distribution is now consistently higher than the background distribution for high PCCs in all the three domains. Let us calculate and adjust p-values of target region-gene pairs:
+
+Calculate empirical p-values of PCCs:
+
+```{r, include=T}
+p1.corr.radius.sign.placed = p1.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p1.bkgd.radius.placed)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p1, radius, placed background:", nrow(p1.corr.radius.sign.placed %>% filter(sign.padj)), "\n")
+
+p2.corr.radius.sign.placed = p2.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p2.bkgd.radius.placed)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p2, radius, placed background:", nrow(p2.corr.radius.sign.placed %>% filter(sign.padj)), "\n")
+
+pM.corr.radius.sign.placed = pM.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, pM.bkgd.radius.placed)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, radius, placed background:", nrow(pM.corr.radius.sign.placed %>% filter(sign.padj)), "\n")
+```
+
+Only 8 significant pairs in pM:
+
+```{r, include=T}
+p1.corr.radius.sign.placed %>%
+  filter(sign.padj)
+
+write.table(p1.corr.radius.sign.placed,
+            file = paste0("../r_results/predict_correlated_expressed_gene/p1_corr_radius_sign_placed_",
+                          "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                          "_min-baseMean", min.baseMean, ".tsv"),
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = F)
+
+p2.corr.radius.sign.placed %>%
+  filter(sign.padj)
+
+write.table(p2.corr.radius.sign.placed,
+            file = paste0("../r_results/predict_correlated_expressed_gene/p2_corr_radius_sign_placed_",
+                          "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                          "_min-baseMean", min.baseMean, ".tsv"),
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = F)
+
+pM.corr.radius.sign.placed %>%
+  filter(sign.padj)
+
+write.table(pM.corr.radius.sign.placed,
+            file = paste0("../r_results/predict_correlated_expressed_gene/pM_corr_radius_sign_placed_",
+                          "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                          "_min-baseMean", min.baseMean, ".tsv"),
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = F)
+```
+
+Four genes (Serpine2, Aldoc, Timp4 and 3110039I08Rik) are were also in significant pairs in with the previous background, although, Aldoc was in a significant pair found in p2, not pM.
 
