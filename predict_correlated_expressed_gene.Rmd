@@ -30,20 +30,26 @@ set.seed(10) # reproduce exactly the same sequence of pseudorandom numbers each 
 
 # Parameters for choosing significantly regulated regions
 fdr = 0.01
-min.l2fc = 1 # Min log2(fold change)
-min.baseMean = 20
+min.l2fc = 2 # Min log2(fold change)
+min.baseMean = 100
 
 fdr.matches = 0.05
 
-expression.cutoff = 5 # min number of normalised reads
+# expression.cutoff = 5 # min number of normalised reads
 
-pass.count.cutoff = 2 # min number of RNA-seq samples with at least expression.cutoff normalised reads
+# pass.count.cutoff = 2 # min number of RNA-seq samples with at least expression.cutoff normalised reads
 
 vicinity.radius = 500 # kbp
 
 pcc.fdr = 0.05
 
 vicinity.sampling.n = 5 # 3
+
+expression.median = 5 # minimal median expression of a gene across all samples to count the gene as expressed
+
+expression.amplitude.remove = 0.5 # the lower proportion of genes to remove by expression amplitude | 0.25
+
+output.suffix = paste0("_expr-median", expression.median, "_ampl", expression.amplitude.remove)
 ```
 
 Define cutoff sets:
@@ -84,17 +90,17 @@ pM.norm.gene.counts.deseq2 = generate_norm_gene_counts(master.table, "pM")
 Select expressed genes:
 
 ```{r, include=T}
-p1.expr.genes = select_expressed_genes(p1.norm.gene.counts.deseq2)
+p1.expr.genes = select_expressed_genes(p1.norm.gene.counts.deseq2, expression.median)
 
-p2.expr.genes = select_expressed_genes(p2.norm.gene.counts.deseq2)
+p2.expr.genes = select_expressed_genes(p2.norm.gene.counts.deseq2, expression.median)
 
-pM.expr.genes = select_expressed_genes(pM.norm.gene.counts.deseq2)
+pM.expr.genes = select_expressed_genes(pM.norm.gene.counts.deseq2, expression.median)
 
-cat("Number of expressed genes in p1 ( expression.cutoff =", expression.cutoff, "):", length(p1.expr.genes), "\n")
+cat("Number of expressed genes in p1 ( expression.median =", expression.median, "):", length(p1.expr.genes), "\n")
 
-cat("Number of expressed genes in p2 ( expression.cutoff =", expression.cutoff, "):", length(p2.expr.genes), "\n")
+cat("Number of expressed genes in p2 ( expression.median =", expression.median, "):", length(p2.expr.genes), "\n")
 
-cat("Number of expressed genes in pM ( expression.cutoff =", expression.cutoff, "):", length(pM.expr.genes), "\n")
+cat("Number of expressed genes in pM ( expression.median =", expression.median, "):", length(pM.expr.genes), "\n")
 ```
 
 Scale the normalised expression counts (calculate z-scores) of expressed genes:
@@ -106,6 +112,37 @@ p2.norm.gene.counts = generate_scaled_counts(p2.norm.gene.counts.deseq2[p2.norm.
 
 pM.norm.gene.counts = generate_scaled_counts(pM.norm.gene.counts.deseq2[pM.norm.gene.counts.deseq2$gene_names %in% pM.expr.genes, ], "gene_names")
 ```
+
+Calculate gene expression amplitude across samples and remove the lower `expression.amplitude.remove` proportion:
+
+```{r, include=T}
+p1.norm.gene.counts = select_genes_by_amplitude(p1.norm.gene.counts, expression.amplitude.remove)
+
+p2.norm.gene.counts = select_genes_by_amplitude(p2.norm.gene.counts, expression.amplitude.remove)
+
+pM.norm.gene.counts = select_genes_by_amplitude(pM.norm.gene.counts, expression.amplitude.remove)
+
+p1.expr.genes = p1.norm.gene.counts$gene_names
+
+p2.expr.genes = p2.norm.gene.counts$gene_names
+
+pM.expr.genes = pM.norm.gene.counts$gene_names
+
+cat("Number of amplitude-selected genes in p1 ( expression.amplitude.remove =", expression.amplitude.remove, "):", 
+    length(p1.expr.genes), "\n")
+
+cat("Number of amplitude-selected genes in p2 ( expression.amplitude.remove =", expression.amplitude.remove, "):", 
+    length(p2.expr.genes), "\n")
+
+cat("Number of amplitude-selected genes in pM ( expression.amplitude.remove =", expression.amplitude.remove, "):", 
+    length(pM.expr.genes), "\n")
+
+# Number of amplitude-selected genes in p1 ( expression.amplitude.remove = 0.25 ): 9980 
+# Number of amplitude-selected genes in p2 ( expression.amplitude.remove = 0.25 ): 10028 
+# Number of amplitude-selected genes in pM ( expression.amplitude.remove = 0.25 ): 9868
+```
+
+The reason for doing this selection is that genes with more variable expression are more likely to be regulated in gliogenesis.
 
 Write down the RNA-seq sample names:
 
@@ -252,7 +289,7 @@ calc_dist_distributions(p2.dep.regions, p2.expr.tss.ranges, "p2")
 calc_dist_distributions(pM.dep.regions, pM.expr.tss.ranges, "pM")
 ```
 
-Up to 2% of NFIA-dependent regions are in core or proximal promoters, hence I will need to analyse them separately (and, probably, to assign them to the closest expressed TSS). For now, I continue to analyse all NFIA-dependent regions together, as the proportion of promoter ones is very small in any of the three domains.
+Up to 1.6% of NFIA-dependent regions are in core or proximal promoters, hence I will need to analyse them separately (and, probably, to assign them to the closest expressed TSS). For now, I continue to analyse all NFIA-dependent regions together, as the proportion of promoter ones is very small in any of the three domains.
 
 Upload mm10 chromosome sizes:
 
@@ -297,7 +334,7 @@ p1.corr.radius = calc_correlations(p1.vicinity.radius, p1.expr.tss.ranges,
                                    "p1",
                                    paste0("../r_results/predict_correlated_expressed_gene/p1_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
+                                          "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 
 p2.corr.radius = calc_correlations(p2.vicinity.radius, p2.expr.tss.ranges,
                                    p2.norm.region.counts, p2.norm.gene.counts,
@@ -305,7 +342,7 @@ p2.corr.radius = calc_correlations(p2.vicinity.radius, p2.expr.tss.ranges,
                                    "p2",
                                    paste0("../r_results/predict_correlated_expressed_gene/p2_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
+                                          "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 
 pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.expr.tss.ranges,
                                    pM.norm.region.counts, pM.norm.gene.counts,
@@ -313,7 +350,7 @@ pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.expr.tss.ranges,
                                    "pM",
                                    paste0("../r_results/predict_correlated_expressed_gene/pM_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
+                                          "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 ```
 
 Generate background PCC distributions:
@@ -330,7 +367,7 @@ p1.bkgd.radius = calc_correlations(p1.vicinity.radius.random, p1.expr.tss.ranges
                                    "p1",
                                    paste0("../r_results/predict_correlated_expressed_gene/p1_bkgd_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
+                                          "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 
 p2.vicinity.radius.random = shuffle_regions_across_vicinities(p2.vicinity.radius, 
                                                               paste0("../r_results/predict_correlated_expressed_gene/p2_random_vicinities_radius_", 
@@ -343,7 +380,7 @@ p2.bkgd.radius = calc_correlations(p2.vicinity.radius.random, p2.expr.tss.ranges
                                    "p2",
                                    paste0("../r_results/predict_correlated_expressed_gene/p2_bkgd_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
+                                          "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 
 pM.vicinity.radius.random = shuffle_regions_across_vicinities(pM.vicinity.radius, 
                                                               paste0("../r_results/predict_correlated_expressed_gene/pM_random_vicinities_radius_", 
@@ -356,7 +393,7 @@ pM.bkgd.radius = calc_correlations(pM.vicinity.radius.random, pM.expr.tss.ranges
                                    "pM",
                                    paste0("../r_results/predict_correlated_expressed_gene/pM_bkgd_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                                          "_min-baseMean", min.baseMean, ".rds"))
+                                          "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 ```
 
 Plot the background and the target distributions of the absolute PCC values:
@@ -375,7 +412,7 @@ p1.plot = p1.corr.bkgd.radius %>%
 
 ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/p1_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_density.pdf"),
+                         "_min-baseMean", min.baseMean, "_", output.suffix, "_density.pdf"),
        plot = p1.plot)
 
 p2.corr.bkgd.radius = p2.corr.radius %>%
@@ -391,7 +428,7 @@ p2.plot = p2.corr.bkgd.radius %>%
 
 ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/p2_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_density.pdf"),
+                         "_min-baseMean", min.baseMean, "_", output.suffix, "_density.pdf"),
        plot = p2.plot)
 
 pM.corr.bkgd.radius = pM.corr.radius %>%
@@ -407,7 +444,7 @@ pM.plot = pM.corr.bkgd.radius %>%
 
 ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene/plots/pM_corr_and_bkgd_in_radius_",
                          vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                         "_min-baseMean", min.baseMean, "_density.pdf"),
+                         "_min-baseMean", min.baseMean, "_", output.suffix, "_density.pdf"),
        plot = pM.plot)
 ```
 
@@ -458,7 +495,7 @@ p1.corr.radius.sign %>%
 write.table(p1.corr.radius.sign,
             file = paste0("../r_results/predict_correlated_expressed_gene/p1_corr_radius_sign_shuffled_",
                           "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                          "_min-baseMean", min.baseMean, ".tsv"),
+                          "_min-baseMean", min.baseMean, "_", output.suffix, ".tsv"),
             quote = F,
             sep = "\t",
             row.names = F,
@@ -470,7 +507,7 @@ p2.corr.radius.sign %>%
 write.table(p2.corr.radius.sign,
             file = paste0("../r_results/predict_correlated_expressed_gene/p2_corr_radius_sign_shuffled_",
                           "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                          "_min-baseMean", min.baseMean, ".tsv"),
+                          "_min-baseMean", min.baseMean, "_", output.suffix, ".tsv"),
             quote = F,
             sep = "\t",
             row.names = F,
@@ -482,7 +519,7 @@ pM.corr.radius.sign %>%
 write.table(pM.corr.radius.sign,
             file = paste0("../r_results/predict_correlated_expressed_gene/pM_corr_radius_sign_shuffled_",
                           "radius_", vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
-                          "_min-baseMean", min.baseMean, ".tsv"),
+                          "_min-baseMean", min.baseMean, "_", output.suffix, ".tsv"),
             quote = F,
             sep = "\t",
             row.names = F,

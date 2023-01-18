@@ -88,16 +88,34 @@ generate_norm_chrom_counts = function(master.table, region.annot, domain.name) {
   return(p.norm.region.counts)
 }
 
-# Select expressed genes (normalised count > 5 in at least 2 samples)
-select_expressed_genes = function(p.norm.gene.counts) {
+# Select expressed genes
+select_expressed_genes = function(p.norm.gene.counts, expression.median) {
   sample.names = names(p.norm.gene.counts)[names(p.norm.gene.counts) != "gene_names"]
   
   return(p.norm.gene.counts %>% 
            rowwise() %>%
-           mutate(pass_count = sum(c_across(all_of(sample.names)) > expression.cutoff)) %>% 
+           mutate(median_expression = median(c_across(all_of(sample.names)))) %>% 
            ungroup() %>%
-           filter(pass_count > pass.count.cutoff) %>%
+           filter(median_expression > expression.median) %>%
            pull(gene_names))
+}
+
+# Select genes by expression amplitude
+select_genes_by_amplitude = function(p.norm.gene.counts, expression.amplitude.remove) {
+  sample.names = names(p.norm.gene.counts)[names(p.norm.gene.counts) != "gene_names"]
+  
+  p.norm.gene.counts %<>% 
+    rowwise() %>%
+    mutate(min_z = min(c_across(all_of(sample.names)))) %>% 
+    mutate(max_z = max(c_across(all_of(sample.names)))) %>% 
+    mutate(ampl = max_z - min_z) %>% 
+    ungroup() %>%
+    arrange(-ampl)
+
+  cutoff.rownumber = round((1 - expression.amplitude.remove) * nrow(p.norm.gene.counts))
+
+  return (p.norm.gene.counts %>%
+            head(cutoff.rownumber))
 }
 
 # Generate TSS coordinates from transcript coordinates
