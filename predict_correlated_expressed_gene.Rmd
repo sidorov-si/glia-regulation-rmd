@@ -30,8 +30,8 @@ set.seed(10) # reproduce exactly the same sequence of pseudorandom numbers each 
 
 # Parameters for choosing significantly regulated regions
 fdr = 0.01
-min.l2fc = 2 # Min log2(fold change)
-min.baseMean = 100
+min.l2fc = 1 # Min log2(fold change)
+min.baseMean = 20 # 100, 40
 
 fdr.matches = 0.05
 
@@ -545,6 +545,34 @@ calc_and_plot_dep_region_pccs(pM.dep.regions,
 ```
 
 Indeed, pairwise PCCs of NFIA-dependent regions in each domain are very high. Consequently, the regions are indeed interchangeable, and shuffling them around vicinities will not give a meaningful background.
+
+Check region-gene pairs obtained for the strictest region set, expressed genes selected by the expression in at least a certain number of samples, vicinity radius 500 kbp, Pearson correlation method: if some NFIA-dependent regions from the pairs are actually elements and if some expressed genes from the pairs are actually NFIA-dependent:
+
+```{r, include=T}
+p1.nfia.elements = readRDS("../r_results/select_diff_regions/p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_0.05_in-regions-of_fdr0.01_min-l2fc2_min-baseMean100.rds")
+
+p2.nfia.elements = readRDS("../r_results/select_diff_regions/p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_0.05_in-regions-of_fdr0.01_min-l2fc2_min-baseMean100.rds")
+
+pM.nfia.elements = readRDS("../r_results/select_diff_regions/pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_0.05_in-regions-of_fdr0.01_min-l2fc2_min-baseMean100.rds")
+
+p1.nfia.elements[names(p1.nfia.elements) == "Interval_88153"]
+
+p2.nfia.elements[names(p2.nfia.elements) == "Interval_33534"]
+
+pM.nfia.elements[names(pM.nfia.elements) %in% c("Interval_5278", "Interval_169839", "Interval_199973")]
+
+p1.dep.genes = readRDS("../r_results/diff_expression/tables/p1_ref_genes.rds")
+
+p2.dep.genes = readRDS("../r_results/diff_expression/tables/p2_ref_genes.rds")
+
+pM.dep.genes = readRDS("../r_results/diff_expression/tables/pM_ref_genes.rds")
+
+p1.dep.genes[p1.dep.genes == "Pla2g7"]
+
+p2.dep.genes[p2.dep.genes == "Aldoc"]
+
+pM.dep.genes[pM.dep.genes %in% c("Serpine2", "Timp4", "3110039I08Rik")]
+```
 
 Let us try another background then: Choose a random new place for each NFIA-dependent region so that its new vicinity does not overlap with the real target vicinities. In this way, I will calculate the correlation of the region's accessibility with the expression of genes which presumably are not regulated by any of the NFIA-dependent regions (enhancers). To make this work, I may need to decrease the vicinity radii and to sample each vicinity several times to have at least the same number of region-gene correlations as in the target distributions (random vicinities that are placed outside of real vicinities may not have enough expressed genes).
 
