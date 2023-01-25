@@ -276,18 +276,57 @@ calc_correlations = function(vicinity.gr, dep.tss,
   return(vicinity.tss.corr.final)
 }
 
-# Shuffle region names across vicinities
-shuffle_regions_across_vicinities = function(p.vicinity.radius, output.filename) {
-  names(p.vicinity.radius) = sample(names(p.vicinity.radius))
+# Calc all pairwise correlations between regions and genes
+calc_correlations_pairs_all = function(p.dep.regions, 
+                                       p.norm.region.counts, p.norm.gene.counts,
+                                       p.region.sample.names, p.gene.sample.names,
+                                       domain.name, corr.rds.filename) {
+  p.names = intersect(p.region.sample.names, p.gene.sample.names)
   
-  export(p.vicinity.radius, output.filename)
+  p.norm.region.counts.dep = p.norm.region.counts %>%
+    filter(region_names %in% p.dep.regions$name) %>%
+    dplyr::select(all_of(c("region_names", p.names))) %>%
+    column_to_rownames(var = "region_names")
   
-  return(p.vicinity.radius)
+  p.norm.gene.counts.shared = p.norm.gene.counts %>%
+    dplyr::select(all_of(c("gene_names", p.names))) %>%
+    column_to_rownames(var = "gene_names")
+  
+  p.bkgd.radius.df = as.data.frame(cor(x = t(p.norm.region.counts.dep), y = t(p.norm.gene.counts.shared))) %>%
+    rownames_to_column(var = "region_names") %>%
+    gather("gene_names", "pcc", -region_names) %>%
+    dplyr::rename("region_id" = "region_names",
+                  "gene_name" = "gene_names") %>%
+    mutate(abs_pcc = abs(pcc)) %>%
+    tibble()
+  
+  cat(domain.name, ":\n")
+  
+  cat("Number of region-gene associations:", nrow(p.bkgd.radius.df), "\n")
+  
+  cat("Number of unique regions          :", length(unique(p.bkgd.radius.df$region_id)), "\n")
+  
+  cat("Number of unique genes            :", length(unique(p.bkgd.radius.df$gene_name)), "\n")
+  
+  cat("---\n")
+  
+  saveRDS(p.bkgd.radius.df, corr.rds.filename)
+  
+  return(p.bkgd.radius.df)
 }
 
+# Shuffle region names across vicinities
+# shuffle_regions_across_vicinities = function(p.vicinity.radius, output.filename) {
+#   names(p.vicinity.radius) = sample(names(p.vicinity.radius))
+#   
+#   export(p.vicinity.radius, output.filename)
+#   
+#   return(p.vicinity.radius)
+# }
+
 # Calculate empirical p-values for target PCCs
-calc_empirical_pvalue = function(abs.pcc, bkgd.df) {
-  return(nrow(bkgd.df %>% filter(abs_pcc >= abs.pcc)) / nrow(bkgd.df))
+calc_empirical_pvalue = function(abs.pcc, abs_pcc_sorted, bkgd.df_nrow) {
+  return(sum(abs_pcc_sorted >= abs.pcc) / bkgd.df_nrow)
 }
 
 # Calculate and plot pairwise PCCs between NFIA-dependent regions
@@ -322,6 +361,7 @@ calc_and_plot_dep_region_pccs = function(dep.regions,
 count_expr_genes_inside_vicinity = function(dep.regions.vicinity.radius, expr.tss.ranges) {
   overlaps.hits.obj = findOverlaps(expr.tss.ranges, 
                                    dep.regions.vicinity.radius,
+                                   type = "within",
                                    select = "all",
                                    ignore.strand = T)
   
@@ -330,19 +370,31 @@ count_expr_genes_inside_vicinity = function(dep.regions.vicinity.radius, expr.ts
   return(length(expr.genes.inside))
 }
 
-# Make sampling.n copies of each vicinity in a GRanges object p1.vicinity.radius
-multiply_vicinities = function(vicinity.gr, sampling.n, output.filename) {
-  vicinity.gr.mult = unlist(as(lapply(1:sampling.n,
-                                      function(i) {
-                                        names(vicinity.gr) = paste0(names(vicinity.gr), ".", i)
-                                        return(vicinity.gr)
-                                      }), 
-                               "GRangesList"))
+find_expr_genes_inside_vicinity = function(dep.regions.vicinity.radius, expr.tss.ranges) {
+  overlaps.hits.obj = findOverlaps(expr.tss.ranges, 
+                                   dep.regions.vicinity.radius,
+                                   type = "within",
+                                   select = "all",
+                                   ignore.strand = T)
   
-  export(vicinity.gr.mult, output.filename)
+  expr.genes.inside = unique(expr.tss.ranges$gene_name[unique(queryHits(overlaps.hits.obj))])
   
-  return(vicinity.gr.mult)
+  return(expr.genes.inside)
 }
+
+# Make sampling.n copies of each vicinity in a GRanges object p1.vicinity.radius
+# multiply_vicinities = function(vicinity.gr, sampling.n, output.filename) {
+#   vicinity.gr.mult = unlist(as(lapply(1:sampling.n,
+#                                       function(i) {
+#                                         names(vicinity.gr) = paste0(names(vicinity.gr), ".", i)
+#                                         return(vicinity.gr)
+#                                       }), 
+#                                "GRangesList"))
+#   
+#   export(vicinity.gr.mult, output.filename)
+#   
+#   return(vicinity.gr.mult)
+# }
 
 # Re-format a vicinity GRanges read from a BED file
 trim_vicinity_gr = function(vicinity.gr) {
