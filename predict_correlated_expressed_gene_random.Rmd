@@ -36,44 +36,24 @@ min.baseMean = 100 # 20, 40
 
 fdr.matches = 0.05
 
-# expression.cutoff = 5 # min number of normalised reads
-
-# pass.count.cutoff = 2 # min number of RNA-seq samples with at least expression.cutoff normalised reads
-
 vicinity.radius = 500 # kbp
 
 pcc.fdr = 0.05
 
 expression.median = 5 # minimal median expression of a gene across all samples to count the gene as expressed
 
-# expression.amplitude.remove = 0.5 # the lower proportion of genes to remove by expression amplitude | 0.25
-
-# output.suffix = paste0("_expr-median", expression.median, "_ampl", expression.amplitude.remove)
-
 output.suffix = paste0("_expr-median", expression.median)
-```
 
-Define cutoff sets:
-
-```{r, include=T}
-region.cutoffs = list("set1" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 100),
-                      "set2" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 80),
-                      "set3" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 60),
-                      "set4" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 40),
-                      "set5" = list("fdr" = 0.01, "min.l2fc" = 2, "min.baseMean" = 20),
-                      "set6" = list("fdr" = 0.01, "min.l2fc" = 1.5, "min.baseMean" = 20),
-                      "set7" = list("fdr" = 0.01, "min.l2fc" = 1, "min.baseMean" = 20),
-                      "set8" = list("fdr" = 0.01, "min.l2fc" = 0.5, "min.baseMean" = 20),
-                      "set9" = list("fdr" = 0.02, "min.l2fc" = 0.5, "min.baseMean" = 20),
-                      "set10" = list("fdr" = 0.03, "min.l2fc" = 0.5, "min.baseMean" = 20),
-                      "set11" = list("fdr" = 0.04, "min.l2fc" = 0.5, "min.baseMean" = 20),
-                      "set12" = list("fdr" = 0.05, "min.l2fc" = 0.5, "min.baseMean" = 20))
+genes.to.exclude = "ERCC-" # exclude spike-in control
 ```
 
 Load the master table:
 
 ```{r, include=T}
-master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts
+master.table = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(!stringr::str_detect(gene_name, fixed(genes.to.exclude))) %>%
+  column_to_rownames(var = "gene_name")
 
 gene.names = rownames(master.table)
 ```
@@ -403,6 +383,8 @@ ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/
        plot = pM.plot)
 ```
 
+The target distributions of absolute PCCs are slightly enriched in higher values.
+
 Plot the background and the target distributions of the PCC values:
 
 ```{r, include=T}
@@ -455,7 +437,7 @@ ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/
        plot = pM.plot)
 ```
 
-Overall, the target distributions of absolute PCCs are slightly enriched in higher values.
+The distributions are not normal, so I do not see any reason for using them instead of the distributions of absolute PCCs.
 
 Calculate empirical p-values of absolute PCCs:
 
@@ -614,7 +596,7 @@ ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/
        plot = pM.plot)
 ```
 
-Check that there are no zero raw p-values:
+Check that there are no zero raw p-values in the original results:
 
 ```{r, include=T}
 p1.corr.radius.sign %>%
@@ -631,6 +613,40 @@ pM.corr.radius.sign %>%
 ```
 
 No zero raw p-values.
+
+Actually, a more correct way of defining the background would be to take only guaranteed non-regulatory region-gene pairs, instead of all pairs, as the background probability distribution should, by definition, correspond to the null hypothesis of a lack of regulation between a region and a gene. Therefore, to build such a distribution, we need to exclude pairs of NFIA-dependent regions with expressed genes on the same chromosome, as any of these genes may potentially be regulated by any of the regions on the chromosome.
+
+Build a modified background without same-chromosome pairs:
+
+```{r, include=T}
+p1.bkgd.radius.outside.chr = calc_correlations_pairs_outside_chr(p1.dep.regions, p1.expr.tss.ranges,
+                                                                 p1.norm.region.counts, p1.norm.gene.counts,
+                                                                 p1.region.sample.names, p1.gene.sample.names,
+                                                                 "p1",
+                                                                 paste0("../r_results/predict_correlated_expressed_gene_random/p1_bkgd_outside_chr_in_radius_",
+                                                                        vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                                        "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
+
+p2.bkgd.radius.outside.chr = calc_correlations_pairs_outside_chr(p2.dep.regions, p2.expr.tss.ranges,
+                                                                 p2.norm.region.counts, p2.norm.gene.counts,
+                                                                 p2.region.sample.names, p2.gene.sample.names,
+                                                                 "p2",
+                                                                 paste0("../r_results/predict_correlated_expressed_gene_random/p2_bkgd_outside_chr_in_radius_",
+                                                                        vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                                        "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
+
+pM.bkgd.radius.outside.chr = calc_correlations_pairs_outside_chr(pM.dep.regions, pM.expr.tss.ranges,
+                                                                 pM.norm.region.counts, pM.norm.gene.counts,
+                                                                 pM.region.sample.names, pM.gene.sample.names,
+                                                                 "pM",
+                                                                 paste0("../r_results/predict_correlated_expressed_gene_random/pM_bkgd_outside_chr_in_radius_",
+                                                                        vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                                                                        "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
+```
+
+...
+
+---
 
 Just single significant pairs:
 
@@ -674,7 +690,7 @@ write.table(pM.corr.radius.sign,
 
 There are only five significant region-gene pairs across the three domains. 
 
-A reason for the lack of significant region-gene pairs could be a high correlation of NFIA-dependent regions between each other so that they are interchangeable across vicinities. Let us check this hypothesis by calculating pairwise PCC distiributions between NFIA-dependent regions (here, PCCs are Pearson correlatin coefficients: -1..1):
+A reason for the lack of significant region-gene pairs could be a high correlation of NFIA-dependent regions between each other so that they are interchangeable across vicinities. Let us check this hypothesis by calculating pairwise PCC distiributions between NFIA-dependent regions (here, PCCs are Pearson correlation coefficients: -1..1):
 
 ```{r, include=T}
 calc_and_plot_dep_region_pccs(p1.dep.regions,
