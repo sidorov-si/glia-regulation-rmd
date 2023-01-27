@@ -644,7 +644,113 @@ pM.bkgd.radius.outside.chr = calc_correlations_pairs_outside_chr(pM.dep.regions,
                                                                         "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
 ```
 
-...
+Plot the background and the target distributions of the absolute PCC values:
+
+```{r, include=T}
+p1.corr.bkgd.radius = p1.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(p1.bkgd.radius.outside.chr %>%
+              mutate(pair_type = "Background"))
+  
+p1.plot = p1.corr.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/plots/p1_corr_and_bkgd_outside-chr_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_", output.suffix, "_density.pdf"),
+       plot = p1.plot)
+
+p2.corr.bkgd.radius = p2.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(p2.bkgd.radius.outside.chr %>%
+              mutate(pair_type = "Background"))
+  
+p2.plot = p2.corr.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/plots/p2_corr_and_bkgd_outside-chr_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_", output.suffix, "_density.pdf"),
+       plot = p2.plot)
+
+pM.corr.bkgd.radius = pM.corr.radius %>%
+  mutate(pair_type = "Target") %>%
+  bind_rows(pM.bkgd.radius.outside.chr %>%
+              mutate(pair_type = "Background"))
+  
+pM.plot = pM.corr.bkgd.radius %>%
+  ggplot(aes(x = abs_pcc,
+             fill = pair_type)) +
+  geom_density(alpha = 0.5) +
+  theme_classic()
+
+ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/plots/pM_corr_and_bkgd_outside-chr_in_radius_",
+                         vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
+                         "_min-baseMean", min.baseMean, "_", output.suffix, "_density.pdf"),
+       plot = pM.plot)
+```
+
+...Interpretation.
+
+Calculate empirical p-values of absolute PCCs:
+
+```{r, include=T}
+p1.bkgd.df_nrow = nrow(p1.bkgd.radius.outside.chr)
+
+p1.abs_pcc_sorted = p1.bkgd.radius.outside.chr %>%
+  arrange(-abs_pcc) %>%
+  pull(abs_pcc)
+
+p1.corr.radius.sign = p1.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p1.abs_pcc_sorted, p1.bkgd.df_nrow)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p1, radius:", nrow(p1.corr.radius.sign %>% filter(sign.padj)), "\n")
+
+p2.bkgd.df_nrow = nrow(p2.bkgd.radius.outside.chr)
+
+p2.abs_pcc_sorted = p2.bkgd.radius.outside.chr %>%
+  arrange(-abs_pcc) %>%
+  pull(abs_pcc)
+
+p2.corr.radius.sign = p2.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, p2.abs_pcc_sorted, p2.bkgd.df_nrow)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in p2, radius:", nrow(p2.corr.radius.sign %>% filter(sign.padj)), "\n")
+
+pM.bkgd.df_nrow = nrow(pM.bkgd.radius.outside.chr)
+
+pM.abs_pcc_sorted = pM.bkgd.radius.outside.chr %>%
+  arrange(-abs_pcc) %>%
+  pull(abs_pcc)
+
+pM.corr.radius.sign = pM.corr.radius %>%
+  rowwise() %>%
+  mutate(pvalue = calc_empirical_pvalue(abs_pcc, pM.abs_pcc_sorted, pM.bkgd.df_nrow)) %>%
+  ungroup() %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  mutate(fdr = pcc.fdr) %>%
+  mutate(sign.padj = (padj < fdr))
+
+cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, radius:", nrow(pM.corr.radius.sign %>% filter(sign.padj)), "\n")
+```
+
+
 
 ---
 
