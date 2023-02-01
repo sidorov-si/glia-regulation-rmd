@@ -152,6 +152,25 @@ generate_tss_annot = function(p.genes, mm10.annot.genes, p.tss.filename) {
   return(p.tss.ranges)
 }
 
+# Generate gene coordinates from transcript coordinates
+generate_genes_annot = function(p.genes, mm10.annot.genes, p.genes.filename) {
+  p.genes.annot = mm10.annot.genes[mm10.annot.genes$gene_name %in% p.genes, ]
+  
+  p.genes.ranges = GRanges(seqnames = p.genes.annot$chr,
+                           ranges = IRanges(start = p.genes.annot$start,
+                                            end   = p.genes.annot$stop,
+                                            names = p.genes.annot$tx_name),
+                           strand = strand(p.genes.annot$strand),
+                           gene_name = p.genes.annot$gene_name)
+  
+  p.genes.merged = GenomicRanges::reduce(p.genes.ranges, 
+                                         ignore.strand = F)
+  
+  export(p.genes.merged, p.genes.filename)
+  
+  return(p.genes.merged)
+}
+
 # Calculate and plot the distribution of distance between NFIA-dependent region and the closest TSS (strand ignored)
 calc_dist_distributions = function(dep.regions, expr.tss.ranges, domain.name) {
   dist.hits.obj = distanceToNearest(dep.regions, expr.tss.ranges, ignore.strand = T)

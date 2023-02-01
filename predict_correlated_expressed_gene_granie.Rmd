@@ -1,0 +1,89 @@
+---
+title: "Transcription regulation in gliogenesis"
+author: "Sviatoslav Sidorov"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+#| output: false
+library(GRaNIE)
+library(dplyr)
+library(stringr)
+library(tibble)
+library(DESeq2)
+```
+
+## Define constants
+
+```{r}
+# Parameters for choosing significantly regulated regions
+fdr = 0.01
+min.l2fc = 2 # Min log2(fold change) | 1
+min.baseMean = 100 # 20, 40
+
+# FDR for NFIA motif matches
+fdr.matches = 0.05
+
+# Radius of region-gene assignment vicinities around regions
+vicinity.radius = 500 # kbp
+
+# Prefix of gene names to exclude from the analysis
+genes.to.exclude = "ERCC-" # exclude spike-in control
+```
+
+## Preprocess raw data
+
+Load gene expression raw counts, exclude the spike-in control and retain only WT samples from Day 7, 9 or 11:
+
+```{r}
+master_table_genes = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(!stringr::str_detect(gene_name, fixed(genes.to.exclude))) %>%
+  column_to_rownames(var = "gene_name") %>%
+  select(all_of(names(.)[stringr::str_detect(names(.), "WT_D[179]+_")]))
+```
+
+Generate domain-specific gene expression tables with raw counts:
+
+```{r}
+p1_gene_expression = master_table_genes %>%
+  select(all_of(names(.)[stringr::str_detect(names(.), "p1")]))
+
+p2_gene_expression = master_table_genes %>%
+  select(all_of(names(.)[stringr::str_detect(names(.), "p2")]))
+
+pM_gene_expression = master_table_genes %>%
+  select(all_of(names(.)[stringr::str_detect(names(.), "pM")]))
+```
+
+Unload the gene expression master table from memory:
+
+```{r}
+rm(master_table_genes)
+```
+
+Load raw accessibility counts and create the region annotation:
+
+```{r}
+master_table_regions = read.delim(file = "../input/consensus_peaks.mRp.clN.featureCounts.txt",
+                                  header = T,
+                                  sep = "\t",
+                                  skip = 1)
+
+names(master_table_regions) = gsub(pattern = ".mLb.clN.bam", 
+                                   replacement = "", 
+                                   x = names(master_table_regions))
+
+region_annot = master_table_regions %>%
+  select(Geneid,
+         Chr,
+         Start,
+         End,
+         Strand,
+         Length)
+
+# ...
+```

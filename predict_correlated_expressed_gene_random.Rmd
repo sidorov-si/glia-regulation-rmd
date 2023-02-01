@@ -213,6 +213,22 @@ mm10.annot.genes = mm10.tx %>%
             by = c("tx_name" = "tx_name"))
 ```
 
+Generate genomic ranges for the expressed genes (overlapping genes are merged):
+
+```{r, include=T}
+p1.expr.genes.ranges = generate_genes_annot(p1.expr.genes,
+                                            mm10.annot.genes,
+                                            "../r_results/predict_correlated_expressed_gene_random/p1_expr_genes.bed")
+
+p2.expr.genes.ranges = generate_genes_annot(p2.expr.genes,
+                                            mm10.annot.genes,
+                                            "../r_results/predict_correlated_expressed_gene_random/p2_expr_genes.bed")
+
+pM.expr.genes.ranges = generate_genes_annot(pM.expr.genes,
+                                            mm10.annot.genes,
+                                            "../r_results/predict_correlated_expressed_gene_random/pM_expr_genes.bed")
+```
+
 Generate genomic ranges for the TSSs of the expressed genes:
 
 ```{r, include=T}
@@ -301,6 +317,31 @@ pM.corr.radius = calc_correlations(pM.vicinity.radius, pM.expr.tss.ranges,
                                    paste0("../r_results/predict_correlated_expressed_gene_random/pM_corr_in_radius_",
                                           vicinity.radius, "kbp_dep_regions_fdr", fdr, "_min-l2fc", min.l2fc,
                                           "_min-baseMean", min.baseMean, "_", output.suffix, ".rds"))
+```
+
+Check how many expressed genes are, on average, located in a +/-500 kbp vicinity of an NFIA-dependent region:
+
+```{r, include=T}
+p1.avg.num.expr.genes = p1.corr.radius %>%
+  count(region_id) %>%
+  pull(n) %>%
+  mean()
+
+p2.avg.num.expr.genes = p2.corr.radius %>%
+  count(region_id) %>%
+  pull(n) %>%
+  mean()
+
+pM.avg.num.expr.genes = pM.corr.radius %>%
+  count(region_id) %>%
+  pull(n) %>%
+  mean()
+
+cat("The average number of expressed genes in a +/-500-kbp region vicinity (p1):", p1.avg.num.expr.genes, "\n")
+
+cat("The average number of expressed genes in a +/-500-kbp region vicinity (p2):", p2.avg.num.expr.genes, "\n")
+
+cat("The average number of expressed genes in a +/-500-kbp region vicinity (pM):", pM.avg.num.expr.genes, "\n")
 ```
 
 Generate background PCC distributions: For each NFIA-dependent region, take all expressed genes:
@@ -493,7 +534,7 @@ cat("Number of significant PCCs ( FDR =", pcc.fdr, ") in pM, radius:", nrow(pM.c
 
 No significant pairs. Indeed, NFIA-dependent regions very highly correlate with each other, and we expect regulated genes to be highly correlated with the corresponding NFIA-dependent regions. Therefore, we have to expect that an NFIA-dependent region is as well correlated with regulated genes from other vicinities as with regulated genes from its own vicinity. Consequently, if a large proportion of background region-gene pairs actually contain expressed genes from region vicinities, then the background PCC distribution may be too close to the target one to be a proper background.
 
-First, check the proportions of expressed genes that are within at least one vicinity of NFIA-dependent regions. A gene is within a vicinity if at least one of its TSSs is within this vicinity:
+Check the proportions of expressed genes that are within at least one vicinity of NFIA-dependent regions. A gene is within a vicinity if at least one of its TSSs is within this vicinity:
 
 ```{r, include=T}
 p1.genes.in.vicinity.n = count_expr_genes_inside_vicinity(p1.vicinity.radius, p1.expr.tss.ranges)
@@ -595,6 +636,8 @@ ggsave(filename = paste0("../r_results/predict_correlated_expressed_gene_random/
                          "_min-baseMean", min.baseMean, "_density.pdf"),
        plot = pM.plot)
 ```
+
+Region-gene pairs with vicinity-located genes slightly enrich the higher values of the absolute PCCs, but do not seem  different enough from the rest of the pairs to skew the background consisting of all pairs. Therefore, expressed genes are just in general very well correlated with NFIA-dependent regions, no matter if the genes are in the region vicinities or not.
 
 Check that there are no zero raw p-values in the original results:
 
