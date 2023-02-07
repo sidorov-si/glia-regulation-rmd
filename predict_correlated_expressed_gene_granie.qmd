@@ -1,0 +1,167 @@
+---
+title: "Transcription regulation in gliogenesis"
+author: "Sviatoslav Sidorov"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(GRaNIE)
+library(dplyr)
+library(stringr)
+library(tibble)
+library(magrittr)
+library(DESeq2)
+library(biomaRt)
+```
+
+## Define constants
+
+```{r}
+# Parameters for choosing significantly regulated regions
+fdr = 0.01
+min.l2fc = 2 # Min log2(fold change) | 1
+min.baseMean = 100 # 20, 40
+
+# FDR for NFIA motif matches
+fdr.matches = 0.05
+
+# Radius of region-gene assignment vicinities around regions
+vicinity.radius = 500 # kbp
+
+# Prefix of gene names to exclude from the analysis
+genes.to.exclude = "ERCC-" # exclude spike-in control
+```
+
+## Preprocess gene expression counts
+
+Load gene expression raw counts, exclude the spike-in control and retain only WT samples from Day 7, 9 or 11:
+
+```{r}
+master_table_genes = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$counts %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(!stringr::str_detect(gene_name, fixed(genes.to.exclude))) %>%
+  column_to_rownames(var = "gene_name") %>%
+  dplyr::select(all_of(names(.)[stringr::str_detect(names(.), "WT_D[179]+_")]))
+```
+
+Add Ensembl IDs to all genes and exclude genes without Ensembl IDs:
+
+```{r}
+gene_id_name = read.delim("../input/ensembl102_grcm38p6_gene_id_names.tsv",
+                           header = F,
+                           sep = "\t") %>%
+  dplyr::rename("gene_id" = "V1",
+                "gene_name" = "V2")
+
+master_table_genes %<>%
+  rownames_to_column(var = "gene_name") %>%
+  left_join(gene_id_name,
+            by = c("gene_name" = "gene_name")) %>%
+  filter(!is.na(gene_id)) %>%
+  dplyr::select(-gene_name) %>%
+  dplyr::select(gene_id,
+                all_of(names(.)[stringr::str_detect(names(.), "WT_D[179]+_")]))
+
+# Some genes have more than one Ensembl ID, hence the warning.
+
+# Table ../input/ensembl102_grcm38p6_gene_id_names.tsv was obtained using the following commands:
+
+# ensembl = useEnsembl(biomart = "ensembl",
+#                      dataset = "mmusculus_gene_ensembl",
+#                      version = "102")
+
+## Ensembl v102 is the last version of the Ensembl database that contains
+## the dataset mmusculus_gene_ensembl based on the reference assembly
+## GRCm38 which corresponds to the assembly mm10 used in the expression and
+## chromatin accessibility quantification.
+
+# gene_id_name = getBM(attributes = c("ensembl_gene_id",
+#                                     "external_gene_name"),
+#                      mart = ensembl)
+# 
+# write.table(gene_id_name,
+#             "../input/ensembl102_grcm38p6_gene_id_names.tsv",
+#             quote = F,
+#             sep = "\t",
+#             row.names = F,
+#             col.names = F)
+```
+
+Generate domain-specific gene expression tables with raw counts:
+
+```{r}
+p1_gene_expression = master_table_genes %>%
+  dplyr::select(gene_id, 
+                all_of(names(.)[stringr::str_detect(names(.), "p1")]))
+
+p2_gene_expression = master_table_genes %>%
+  dplyr::select(gene_id, 
+                all_of(names(.)[stringr::str_detect(names(.), "p2")]))
+
+pM_gene_expression = master_table_genes %>%
+  dplyr::select(gene_id,
+                all_of(names(.)[stringr::str_detect(names(.), "pM")]))
+```
+
+Unload the gene expression master table from memory:
+
+```{r}
+rm(master_table_genes)
+```
+
+## Preprocess region accessibility counts
+
+Load raw accessibility counts, retain only WT samples from Day 7, 9 or 11 and create the region annotation:
+
+```{r}
+master_table_regions = read.delim(file = "../input/consensus_peaks.mRp.clN.featureCounts.txt",
+                                  header = T,
+                                  sep = "\t",
+                                  skip = 1)
+
+names(master_table_regions) = gsub(pattern = ".mLb.clN.bam", 
+                                   replacement = "", 
+                                   x = names(master_table_regions))
+
+region_annot = master_table_regions %>%
+  dplyr::select(Geneid,
+                Chr,
+                Start,
+                End,
+                Strand,
+                Length)
+
+master_table_regions %<>%
+  mutate(region_id = paste0(Chr, ":", Start, "-", End)) %>%
+  dplyr::select(region_id, 
+                all_of(names(.)[stringr::str_detect(names(.), "WT_D[179]+_")]))
+```
+
+Generate domain-specific region accessibility tables with raw counts:
+
+```{r}
+p1_region_accessibility = master_table_regions %>%
+  dplyr::select(region_id, 
+                all_of(names(.)[stringr::str_detect(names(.), "p1")]))
+
+p2_region_accessibility = master_table_regions %>%
+  dplyr::select(region_id, 
+                all_of(names(.)[stringr::str_detect(names(.), "p2")]))
+
+pM_region_accessibility = master_table_regions %>%
+  dplyr::select(region_id, 
+                all_of(names(.)[stringr::str_detect(names(.), "pM")]))
+```
+
+Unload the region accessibility master table from memory:
+
+```{r}
+rm(master_table_regions)
+```
+
+## Create a GRN
+
+...
