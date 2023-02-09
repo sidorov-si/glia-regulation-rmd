@@ -17,9 +17,12 @@ library(DESeq2)
 library(biomaRt)
 ```
 
-## Define constants
+## Define constants and helper functions
 
 ```{r}
+# Define helper functions
+source("helper_functions_granie.R")
+
 # Parameters for choosing significantly regulated regions
 fdr = 0.01
 min.l2fc = 2 # Min log2(fold change) | 1
@@ -47,7 +50,7 @@ master_table_genes = assays(readRDS("../input/salmon.merged.gene_counts.rds"))$c
   dplyr::select(all_of(names(.)[stringr::str_detect(names(.), "WT_D[179]+_")]))
 ```
 
-Add Ensembl IDs to all genes and exclude genes without Ensembl IDs:
+Add Ensembl IDs to all genes and exclude genes without Ensembl IDs. Use Ensembl v102, as it is the last version of the Ensembl database whose dataset `mmusculus_gene_ensembl` is still based on the reference assembly GRCm38 which corresponds to the assembly mm10 used in the expression and chromatin accessibility quantification:
 
 ```{r}
 gene_id_name = read.delim("../input/ensembl102_grcm38p6_gene_id_names.tsv",
@@ -72,12 +75,7 @@ master_table_genes %<>%
 # ensembl = useEnsembl(biomart = "ensembl",
 #                      dataset = "mmusculus_gene_ensembl",
 #                      version = "102")
-
-## Ensembl v102 is the last version of the Ensembl database that contains
-## the dataset mmusculus_gene_ensembl based on the reference assembly
-## GRCm38 which corresponds to the assembly mm10 used in the expression and
-## chromatin accessibility quantification.
-
+# 
 # gene_id_name = getBM(attributes = c("ensembl_gene_id",
 #                                     "external_gene_name"),
 #                      mart = ensembl)
@@ -162,6 +160,44 @@ Unload the region accessibility master table from memory:
 rm(master_table_regions)
 ```
 
-## Create a GRN
+## Create GRNs
 
-...
+Create domain-specific tables of sample metadata:
+
+```{r}
+sample_meta_p1 = generate_sample_meta(p1_gene_expression, p1_region_accessibility)
+
+sample_meta_p2 = generate_sample_meta(p2_gene_expression, p2_region_accessibility)
+
+sample_meta_pM = generate_sample_meta(pM_gene_expression, pM_region_accessibility)
+```
+
+Initialize GRNs:
+
+```{r}
+grn_p1 = initializeGRN(objectMetadata = list(domain = "p1"),
+                       outputFolder = "../r_results/predict_correlated_expressed_gene_granie/grn_p1",
+                       genomeAssembly = "mm10")
+
+grn_p2 = initializeGRN(objectMetadata = list(domain = "p2"),
+                       outputFolder = "../r_results/predict_correlated_expressed_gene_granie/grn_p2",
+                       genomeAssembly = "mm10")
+
+grn_pM = initializeGRN(objectMetadata = list(domain = "pM"),
+                       outputFolder = "../r_results/predict_correlated_expressed_gene_granie/grn_pM",
+                       genomeAssembly = "mm10")
+```
+
+Add data to GRNs (by default, ):
+
+```{r}
+grn.p1 = addData(GRN = grn_p1,
+                 counts_peaks = p1_region_accessibility,
+                 normalization_peaks = "DESeq2_sizeFactors",
+                 idColumn_peaks = "region_id",
+                 counts_rna = p1_gene_expression,
+                 normalization_rna = "limma_quantile",
+                 idColumn_RNA = "gene_id",
+                 sampleMetadata = sample_meta_p1,
+                 forceRerun = T)
+```
