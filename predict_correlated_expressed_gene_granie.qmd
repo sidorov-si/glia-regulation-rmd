@@ -200,4 +200,25 @@ grn.p1 = addData(GRN = grn_p1,
                  idColumn_RNA = "gene_id",
                  sampleMetadata = sample_meta_p1,
                  forceRerun = T)
+
+grn.p2 = addData(GRN = grn_p2,
+                 counts_peaks = p2_region_accessibility,
+                 normalization_peaks = "DESeq2_sizeFactors",
+                 idColumn_peaks = "region_id",
+                 counts_rna = p2_gene_expression,
+                 normalization_rna = "limma_quantile",
+                 idColumn_RNA = "gene_id",
+                 sampleMetadata = sample_meta_p2,
+                 forceRerun = T)
+
+grn.pM = addData(GRN = grn_pM,
+                 counts_peaks = pM_region_accessibility,
+                 normalization_peaks = "DESeq2_sizeFactors",
+                 idColumn_peaks = "region_id",
+                 counts_rna = pM_gene_expression,
+                 normalization_rna = "limma_quantile",
+                 idColumn_RNA = "gene_id",
+                 sampleMetadata = sample_meta_pM,
+                 forceRerun = T)
 ```
+
