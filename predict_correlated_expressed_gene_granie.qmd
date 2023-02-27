@@ -188,10 +188,10 @@ grn_pM = initializeGRN(objectMetadata = list(domain = "pM"),
                        genomeAssembly = "mm10")
 ```
 
-Add data to GRNs (by default, ):
+Add data to GRNs (as of version 1.3.25, GRaNIE still does not allow a custom genome annotation, so it will use the latest version of the Ensembl annotation of the mouse genome):
 
 ```{r}
-grn.p1 = addData(GRN = grn_p1,
+grn_p1 = addData(GRN = grn_p1,
                  counts_peaks = p1_region_accessibility,
                  normalization_peaks = "DESeq2_sizeFactors",
                  idColumn_peaks = "region_id",
@@ -201,7 +201,7 @@ grn.p1 = addData(GRN = grn_p1,
                  sampleMetadata = sample_meta_p1,
                  forceRerun = T)
 
-grn.p2 = addData(GRN = grn_p2,
+grn_p2 = addData(GRN = grn_p2,
                  counts_peaks = p2_region_accessibility,
                  normalization_peaks = "DESeq2_sizeFactors",
                  idColumn_peaks = "region_id",
@@ -211,7 +211,7 @@ grn.p2 = addData(GRN = grn_p2,
                  sampleMetadata = sample_meta_p2,
                  forceRerun = T)
 
-grn.pM = addData(GRN = grn_pM,
+grn_pM = addData(GRN = grn_pM,
                  counts_peaks = pM_region_accessibility,
                  normalization_peaks = "DESeq2_sizeFactors",
                  idColumn_peaks = "region_id",
@@ -222,3 +222,170 @@ grn.pM = addData(GRN = grn_pM,
                  forceRerun = T)
 ```
 
+PCA plot for gene expression:
+
+```{r}
+plotPCA_all(GRN = grn_p1,
+            data = c("rna"),
+            basenameOutput = "p1_pca",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Samples from Day 9 and Day 11 are mostly separated by PC2, while Day 7 is not separated by PC2 from Day 9 because of one sample (WT_D7_p1_NFIAn_R3) positioned together with samples from Day 9. However, this does not make biological sense, as on Day 7 the NFIA-dependent gliogenesis program is still inactive, and for the same reason the separation of the other two Day 7 samples from the rest makes sense. Therefore, to obtain a clear separation of Day 7 samples from Day 9 and 11 samples, I will remove the "outlier" sample (WT_D7_p1_NFIAn_R3).
+
+PCA plot for region accessibility:
+
+```{r}
+plotPCA_all(GRN = grn_p1,
+            data = c("peaks"),
+            basenameOutput = "p1_pca",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Samples are very clearly grouped by the day and separated by PC1. Interestingly, the between-sample difference, compared to the between-day difference, is much smaller in region accessibility than in gene expression.
+
+Remove sample WT_D7_p1_NFIAn_R3 from the p1 gene expression table, as discussed above:
+
+```{r}
+p1_gene_expression %<>% dplyr::select(-WT_D7_p1_NFIAn_R3)
+```
+
+Re-create the p1 GRN without the excluded sample:
+
+```{r}
+sample_meta_p1 = generate_sample_meta(p1_gene_expression, p1_region_accessibility)
+
+grn_p1 = initializeGRN(objectMetadata = list(domain = "p1"),
+                       outputFolder = "../r_results/predict_correlated_expressed_gene_granie/grn_p1",
+                       genomeAssembly = "mm10")
+
+grn_p1 = addData(GRN = grn_p1,
+                 counts_peaks = p1_region_accessibility,
+                 normalization_peaks = "DESeq2_sizeFactors",
+                 idColumn_peaks = "region_id",
+                 counts_rna = p1_gene_expression,
+                 normalization_rna = "limma_quantile",
+                 idColumn_RNA = "gene_id",
+                 sampleMetadata = sample_meta_p1,
+                 forceRerun = T)
+```
+
+Do PCA again for the p1 GRN without the excluded sample.
+
+PCA plot for gene expression without the excluded sample:
+
+```{r}
+plotPCA_all(GRN = grn_p1,
+            data = c("rna"),
+            basenameOutput = "p1_pca_noout",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Now the two remaining samples from Day 7 are clearly separated by PC1 from the samples from Day 9 and Day 11 which, in turn, are not separated from each other. This makes sense.
+
+PCA plot for region accessibility without the excluded sample:
+
+```{r}
+plotPCA_all(GRN = grn_p1,
+            data = c("peaks"),
+            basenameOutput = "p1_pca_noout",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+The clear separation of samples from Day 7, 9 and 11 did not change, which makes sense (as the excluded sample was not an outlier in the original PCA plot for peak accessibility).
+
+Make a p2-specific PCA plot for RNA-seq samples:
+
+```{r}
+plotPCA_all(GRN = grn_p2,
+            data = c("rna"),
+            basenameOutput = "p2_pca",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Samples from Day 7, 9 and 11 are separated by PC2. All good. Of note, NFIA-negative samples from Day 9 group together with NFIA-positive samples from the same day and not to samples from Day 7. This fact suggests that NFIA-negative samples are not really "negative."
+
+Make a p2-specific PCA plot for ATAC-seq samples:
+
+```{r}
+plotPCA_all(GRN = grn_p2,
+            data = c("peaks"),
+            basenameOutput = "p2_pca",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Samples from Day 7, 9 and 11 are separated by PC1. All good.
+
+Make a pM-specific PCA plot for RNA-seq samples:
+
+```{r}
+plotPCA_all(GRN = grn_pM,
+            data = c("rna"),
+            basenameOutput = "pM_pca",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Samples from Day 7, 9 and 11 are separated by PC2, and samples from Day 7 are located further from the rest of the samples (along the PC2 axis) than Day 9 samples from Day 11 samples. All good. Again, NFIA-negative Day 9 samples group with NFIA-positive Day 9 samples and not with Day 7 samples, which again suggests that the "NFIA-negative" samples are actually not NFIA-negative.
+
+Make a pM-specific PCA plot for ATAC-seq samples:
+
+```{r}
+plotPCA_all(GRN = grn_pM,
+            data = c("peaks"),
+            basenameOutput = "pM_pca",
+            topn = 500,
+            type = "normalized",
+            removeFiltered = T,
+            plotAsPDF = F,
+            pages = c(5),
+            forceRerun = T)
+```
+
+Samples from Day 7, 9 and 11 are separated by PC1. All good.
+
+## Filter genes and peaks
+
+...
+
+## Predict regulatory connections
+
+Predict enhancer-gene connections in p1:
+
+```{r}
+
+```
