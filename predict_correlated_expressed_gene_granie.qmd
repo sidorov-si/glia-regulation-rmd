@@ -380,12 +380,64 @@ Samples from Day 7, 9 and 11 are separated by PC1. All good.
 
 ## Filter genes and peaks
 
-...
+Filter low-count genes and peaks:
+
+```{r}
+grn_p1 = filterData(GRN = grn_p1,
+                    minNormalizedMean_peaks = 5,
+                    minNormalizedMeanRNA = 5,
+                    forceRerun = T)
+
+grn_p2 = filterData(GRN = grn_p2,
+                    minNormalizedMean_peaks = 5,
+                    minNormalizedMeanRNA = 5,
+                    forceRerun = T)
+
+grn_pM = filterData(GRN = grn_pM,
+                    minNormalizedMean_peaks = 5,
+                    minNormalizedMeanRNA = 5,
+                    forceRerun = T)
+```
 
 ## Predict regulatory connections
 
 Predict enhancer-gene connections in p1:
 
 ```{r}
+grn_p1 = addConnections_peak_gene(GRN = grn_p1,
+                                  overlapTypeGene = "TSS",
+                                  corMethod = "pearson",
+                                  promoterRange = 500000,
+                                  nCores = 2,
+                                  plotDiagnosticPlots = T,
+                                  forceRerun = T)
 
+grn_p2 = addConnections_peak_gene(GRN = grn_p2,
+                                  overlapTypeGene = "TSS",
+                                  corMethod = "pearson",
+                                  promoterRange = 500000,
+                                  nCores = 2,
+                                  plotDiagnosticPlots = T,
+                                  forceRerun = T)
+
+grn_pM = addConnections_peak_gene(GRN = grn_pM,
+                                  overlapTypeGene = "TSS",
+                                  corMethod = "pearson",
+                                  promoterRange = 500000,
+                                  nCores = 2,
+                                  plotDiagnosticPlots = T,
+                                  forceRerun = T)
+```
+
+Save the GRN objects:
+
+```{r}
+saveRDS(grn_p1,
+        "../r_results/predict_correlated_expressed_gene_granie/grn_p1/grn_p1.rds")
+
+saveRDS(grn_p2,
+        "../r_results/predict_correlated_expressed_gene_granie/grn_p2/grn_p2.rds")
+
+saveRDS(grn_pM,
+        "../r_results/predict_correlated_expressed_gene_granie/grn_pM/grn_pM.rds")
 ```
