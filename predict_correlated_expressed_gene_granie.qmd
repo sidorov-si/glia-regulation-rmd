@@ -23,19 +23,23 @@ library(biomaRt)
 # Define helper functions
 source("helper_functions_granie.R")
 
-# Parameters for choosing significantly regulated regions
-fdr = 0.01
-min.l2fc = 2 # Min log2(fold change) | 1
-min.baseMean = 100 # 20, 40
-
-# FDR for NFIA motif matches
-fdr.matches = 0.05
+# Min norm mean counts to filter genes and regions (peaks)
+min.norm.rna.counts = 10 # 5
+min.norm.peak.counts = 10 # 5
 
 # Radius of region-gene assignment vicinities around regions
-vicinity.radius = 500 # kbp
+vicinity.radius = 500000 # bp
 
 # Prefix of gene names to exclude from the analysis
 genes.to.exclude = "ERCC-" # exclude spike-in control
+
+# Parameters for choosing significantly regulated regions
+# fdr = 0.01
+# min.l2fc = 2 # Min log2(fold change) | 1
+# min.baseMean = 100 # 20, 40
+
+# FDR for NFIA motif matches
+# fdr.matches = 0.05
 ```
 
 ## Preprocess gene expression counts
@@ -231,7 +235,7 @@ plotPCA_all(GRN = grn_p1,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -247,7 +251,7 @@ plotPCA_all(GRN = grn_p1,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -291,7 +295,7 @@ plotPCA_all(GRN = grn_p1,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -307,7 +311,7 @@ plotPCA_all(GRN = grn_p1,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -323,7 +327,7 @@ plotPCA_all(GRN = grn_p2,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -339,7 +343,7 @@ plotPCA_all(GRN = grn_p2,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -355,7 +359,7 @@ plotPCA_all(GRN = grn_pM,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -371,7 +375,7 @@ plotPCA_all(GRN = grn_pM,
             topn = 500,
             type = "normalized",
             removeFiltered = T,
-            plotAsPDF = F,
+            plotAsPDF = T,
             pages = c(5),
             forceRerun = T)
 ```
@@ -380,34 +384,34 @@ Samples from Day 7, 9 and 11 are separated by PC1. All good.
 
 ## Filter genes and peaks
 
-Filter low-count genes and peaks:
+Remove low-count and low-variability genes and peaks:
 
 ```{r}
 grn_p1 = filterData(GRN = grn_p1,
-                    minNormalizedMean_peaks = 5,
-                    minNormalizedMeanRNA = 5,
+                    minNormalizedMean_peaks = min.norm.peak.counts, 
+                    minNormalizedMeanRNA = min.norm.rna.counts, 
                     forceRerun = T)
 
 grn_p2 = filterData(GRN = grn_p2,
-                    minNormalizedMean_peaks = 5,
-                    minNormalizedMeanRNA = 5,
+                    minNormalizedMean_peaks = min.norm.peak.counts, 
+                    minNormalizedMeanRNA = min.norm.rna.counts, 
                     forceRerun = T)
 
 grn_pM = filterData(GRN = grn_pM,
-                    minNormalizedMean_peaks = 5,
-                    minNormalizedMeanRNA = 5,
+                    minNormalizedMean_peaks = min.norm.peak.counts, 
+                    minNormalizedMeanRNA = min.norm.rna.counts,
                     forceRerun = T)
 ```
 
 ## Predict regulatory connections
 
-Predict enhancer-gene connections in p1:
+Predict enhancer-gene connections in all the three domains:
 
 ```{r}
 grn_p1 = addConnections_peak_gene(GRN = grn_p1,
                                   overlapTypeGene = "TSS",
                                   corMethod = "pearson",
-                                  promoterRange = 500000,
+                                  promoterRange = vicinity.radius,
                                   nCores = 2,
                                   plotDiagnosticPlots = T,
                                   forceRerun = T)
@@ -415,7 +419,7 @@ grn_p1 = addConnections_peak_gene(GRN = grn_p1,
 grn_p2 = addConnections_peak_gene(GRN = grn_p2,
                                   overlapTypeGene = "TSS",
                                   corMethod = "pearson",
-                                  promoterRange = 500000,
+                                  promoterRange = vicinity.radius,
                                   nCores = 2,
                                   plotDiagnosticPlots = T,
                                   forceRerun = T)
@@ -423,7 +427,7 @@ grn_p2 = addConnections_peak_gene(GRN = grn_p2,
 grn_pM = addConnections_peak_gene(GRN = grn_pM,
                                   overlapTypeGene = "TSS",
                                   corMethod = "pearson",
-                                  promoterRange = 500000,
+                                  promoterRange = vicinity.radius,
                                   nCores = 2,
                                   plotDiagnosticPlots = T,
                                   forceRerun = T)
@@ -441,3 +445,15 @@ saveRDS(grn_p2,
 saveRDS(grn_pM,
         "../r_results/predict_correlated_expressed_gene_granie/grn_pM/grn_pM.rds")
 ```
+
+For p1, the QC plots on page 1 of the corresponding PDF look good: (1) The raw p-value density for positively correlated connections for the real signal peak at at the smallest p-values (and although the density for the negatively correlated connections peaks at the same p-value range, the peak is much lower); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections; (3) Real connections demonstrate more extreme correlation coefficients than background connections.
+
+For p2, the QC plots on page 1 of the corresponding PDF look worse than for p1, but still acceptable: (1) Almost the same as for p1 (looks OK); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections, but negligibly; (3) Real connections demonstrate more extreme correlation coefficients than background connections, but also negligibly.
+
+For pMN, the QC plots on page 1 of the corresponding PDF look worse than for p1, but still acceptable: (1) Almost the same as for p2 (the background distributions are even less uniform than in p2 but are still OK); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections, but negligibly (exactly like for p2); (3) Real connections demonstrate more extreme correlation coefficients than background connections, but not as much as for p1 (although the distributions definitely look more different than for p2).
+
+The weak dominance of positively correlated connections over negatively correlated connections in all the three domains (and especially in p2 and pMN) could be explained by either any technical problems with the data (for example, the number of samples for each domain is less than 12 which is considered the minimal number of samples for the successful GRaNIE analysis by the authors of the package) or by some biological effects (either a possible biological relevance of negative correlations between peak accessibility and gene expression, which GRaNIE authors dismiss, or a possible colocalisation of peaks and genes that are strongly positively regulated with peaks and genes that are strongly negatively regulated, so that genes under both modes of regulation would be found in any given vicinity around a peak; this possibility is in line with my previous failures to establish a working background and implies that long-range regulation that skips non-target genes and enhancers is predominant).
+
+## Analyse the predicted connections
+
+...
