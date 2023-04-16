@@ -41,6 +41,9 @@ min.baseMean = 100
 
 # FDR for NFIA motif matches
 fdr.matches = 0.05
+
+# FDR for predicted region-gene pairs
+fdr.pairs = 0.2
 ```
 
 ## Preprocess gene expression counts
@@ -657,5 +660,123 @@ saveRDS(pM.conn,
 
 ## Explore predicted region-gene pairs
 
-...
+Form the target sets of region-gene pairs:
 
+```{r}
+p1.conn.dep = p1.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_dependent)
+
+p2.conn.dep = p2.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_dependent)
+
+pM.conn.dep = pM.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_dependent)
+
+p1.conn.element = p1.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_element)
+
+p2.conn.element = p2.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_element)
+
+pM.conn.element = pM.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_element)
+
+p1.conn.dep.dep = p1.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_dependent & is_dependent_gene)
+
+p2.conn.dep.dep = p2.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_dependent & is_dependent_gene)
+
+pM.conn.dep.dep = pM.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_dependent & is_dependent_gene)
+
+p1.conn.element.dep = p1.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_element & is_dependent_gene)
+
+p2.conn.element.dep = p2.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_element & is_dependent_gene)
+
+pM.conn.element.dep = pM.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(is_element & is_dependent_gene)
+```
+
+Summarise the predicted region-gene pairs:
+
+```{r}
+cat("p1:\n")
+
+cat("The number of significant region-gene pairs with NFIA-dependent regions:", nrow(p1.conn.dep), "\n")
+
+cat("The number of significant region-gene pairs with NFIA elements:", nrow(p1.conn.element), "\n")
+
+cat("The number of significant region-gene pairs with NFIA-dependent regions and genes:", nrow(p1.conn.dep.dep), "\n")
+
+cat("The number of significant region-gene pairs with NFIA elements and NFIA-dependent genes:", nrow(p1.conn.element.dep), "\n")
+
+cat("p2:\n")
+
+cat("The number of significant region-gene pairs with NFIA-dependent regions:", nrow(p2.conn.dep), "\n")
+
+cat("The number of significant region-gene pairs with NFIA elements:", nrow(p2.conn.element), "\n")
+
+cat("The number of significant region-gene pairs with NFIA-dependent regions and genes:", nrow(p2.conn.dep.dep), "\n")
+
+cat("The number of significant region-gene pairs with NFIA elements and NFIA-dependent genes:", nrow(p2.conn.element.dep), "\n")
+
+cat("pM:\n")
+
+cat("The number of significant region-gene pairs with NFIA-dependent regions:", nrow(pM.conn.dep), "\n")
+
+cat("The number of significant region-gene pairs with NFIA elements:", nrow(pM.conn.element), "\n")
+
+cat("The number of significant region-gene pairs with NFIA-dependent regions and genes:", nrow(pM.conn.dep.dep), "\n")
+
+cat("The number of significant region-gene pairs with NFIA elements and NFIA-dependent genes:", nrow(pM.conn.element.dep), "\n")
+```
+
+There is only one significant NFIA element -- NFIA-dependent gene pair in p1, hence we will compare only p2 and pMN.
+
+Save the tables of significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN:
+
+```{r}
+saveRDS(p2.conn.element.dep,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
+
+saveRDS(pM.conn.element.dep,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
+```
+
+Stratify the significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN into positively and negatively correlated. We expect them all to be positively correlated:
+
+```{r}
+cat("The numbers of positively/negatively correlated significant pairs in p2:", 
+    nrow(p2.conn.element.dep %>%
+      filter(peak_gene.r > 0)), "/",
+    nrow(p2.conn.element.dep %>%
+      filter(peak_gene.r <= 0)), "\n")
+
+cat("The numbers of positively/negatively correlated significant pairs in pM:", 
+    nrow(pM.conn.element.dep %>%
+      filter(peak_gene.r > 0)), "/",
+    nrow(pM.conn.element.dep %>%
+      filter(peak_gene.r <= 0)), "\n")
+```
+
+The vast majority of the pairs are correlated positively, as expected. But I need to check the one negatively correlated pair in pMN:
+
+```{r}
+pM.conn.element.dep %>%
+      filter(peak_gene.r <= 0)
+```
