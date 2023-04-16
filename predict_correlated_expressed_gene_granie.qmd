@@ -15,6 +15,7 @@ library(tibble)
 library(magrittr)
 library(DESeq2)
 library(biomaRt)
+library(readr)
 ```
 
 ## Define constants and helper functions
@@ -34,12 +35,12 @@ vicinity.radius = 500000 # bp
 genes.to.exclude = "ERCC-" # exclude spike-in control
 
 # Parameters for choosing significantly regulated regions
-# fdr = 0.01
-# min.l2fc = 2 # Min log2(fold change) | 1
-# min.baseMean = 100 # 20, 40
+fdr = 0.01
+min.l2fc = 2 # Min log2(fold change)
+min.baseMean = 100
 
 # FDR for NFIA motif matches
-# fdr.matches = 0.05
+fdr.matches = 0.05
 ```
 
 ## Preprocess gene expression counts
@@ -458,7 +459,7 @@ I tried to filter by the minimum mean normalised exression of 5 (default in GRaN
 
 ## Analyse the predicted connections
 
-Extract the predicted ("real") connections:
+Extract the predicted ("real") connections and adjust their raw p-values:
 
 ```{r}
 grn_p1 = readRDS("../r_results/predict_correlated_expressed_gene_granie/grn_p1/grn_p1.rds")
@@ -467,24 +468,194 @@ grn_p2 = readRDS("../r_results/predict_correlated_expressed_gene_granie/grn_p2/g
 
 grn_pM = readRDS("../r_results/predict_correlated_expressed_gene_granie/grn_pM/grn_pM.rds")
 
-grn_p1 = filterGRNAndConnectGenes(grn_p1,
-                                  peak_gene.fdr.threshold = 0.2,
-                                  peak_gene.fdr.method = "BH",
-                                  gene.types = "all",
-                                  allowMissingTFs = T,
-                                  peak_gene.r_range = c(0, 1))
+p1.conn = as.data.frame(grn_p1@connections$peak_genes[["0"]]) %>%
+  mutate(padj = p.adjust(peak_gene.p_raw, method = "BH"))
 
-grn_p2 = filterGRNAndConnectGenes(grn_p2,
-                                  peak_gene.fdr.threshold = 0.2,
-                                  peak_gene.fdr.method = "BH",
-                                  gene.types = "all",
-                                  allowMissingTFs = T,
-                                  peak_gene.r_range = c(0, 1))
+p2.conn = as.data.frame(grn_p2@connections$peak_genes[["0"]]) %>%
+  mutate(padj = p.adjust(peak_gene.p_raw, method = "BH"))
 
-grn_pM = filterGRNAndConnectGenes(grn_pM,
-                                  peak_gene.fdr.threshold = 0.2,
-                                  peak_gene.fdr.method = "BH",
-                                  gene.types = "all",
-                                  allowMissingTFs = T,
-                                  peak_gene.r_range = c(0, 1))
+pM.conn = as.data.frame(grn_pM@connections$peak_genes[["0"]]) %>%
+  mutate(padj = p.adjust(peak_gene.p_raw, method = "BH"))
 ```
+
+Annotate NFIA-dependent regions in all the predicted connections:
+
+```{r}
+p1.11.7.dep = readRDS(paste0("../r_results/diff_accessibility/tables/p1_D11_vs_D7_dep", 
+                             "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+
+p2.11.7.dep = readRDS(paste0("../r_results/diff_accessibility/tables/p2_D11_vs_D7_dep", 
+                             "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+
+pM.11.7.dep = readRDS(paste0("../r_results/diff_accessibility/tables/pM_D11_vs_D7_dep", 
+                             "_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds"))
+
+p1.regions.annot = read_delim(file = "../results/select_samples/featureCounts_WT_D7_p1_vs_WT_D11_p1.tsv",
+                              delim = "\t",
+                              col_names = TRUE,
+                              col_select = c(Geneid,
+                                             Chr,
+                                             Start,
+                                             End,
+                                             Strand,
+                                             Length)) %>%
+  mutate(peak.ID = paste0(Chr, ":", Start, "-", End))
+
+p2.regions.annot = read_delim(file = "../results/select_samples/featureCounts_WT_D7_p2_vs_WT_D11_p2.tsv",
+                              delim = "\t",
+                              col_names = TRUE,
+                              col_select = c(Geneid,
+                                             Chr,
+                                             Start,
+                                             End,
+                                             Strand,
+                                             Length)) %>%
+  mutate(peak.ID = paste0(Chr, ":", Start, "-", End))
+
+pM.regions.annot = read_delim(file = "../results/select_samples/featureCounts_WT_D7_pM_vs_WT_D11_pM.tsv",
+                              delim = "\t",
+                              col_names = TRUE,
+                              col_select = c(Geneid,
+                                             Chr,
+                                             Start,
+                                             End,
+                                             Strand,
+                                             Length)) %>%
+  mutate(peak.ID = paste0(Chr, ":", Start, "-", End))
+
+p1.dep.annot = p1.regions.annot %>%
+  filter(Geneid %in% p1.11.7.dep)
+
+p2.dep.annot = p2.regions.annot %>%
+  filter(Geneid %in% p2.11.7.dep)
+
+pM.dep.annot = pM.regions.annot %>%
+  filter(Geneid %in% pM.11.7.dep)
+
+p1.conn %<>%
+  mutate(is_dependent = (peak.ID %in% p1.dep.annot$peak.ID))
+
+p2.conn %<>%
+  mutate(is_dependent = (peak.ID %in% p2.dep.annot$peak.ID))
+
+pM.conn %<>%
+  mutate(is_dependent = (peak.ID %in% pM.dep.annot$peak.ID))
+```
+
+Annotate NFIA elements in all the predicted connections:
+
+```{r}
+p1.nfia.df = readRDS(paste0("../r_results/select_diff_regions/", 
+                                    "p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                    "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
+  as.data.frame() %>%
+  mutate(peak.ID = paste0(seqnames, ":", start, "-", end))
+
+p2.nfia.df = readRDS(paste0("../r_results/select_diff_regions/", 
+                                    "p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                    "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
+  as.data.frame() %>%
+  mutate(peak.ID = paste0(seqnames, ":", start, "-", end))
+
+pM.nfia.df = readRDS(paste0("../r_results/select_diff_regions/", 
+                                    "pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                                    "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
+  as.data.frame() %>%
+  mutate(peak.ID = paste0(seqnames, ":", start, "-", end))
+
+p1.conn %<>%
+  mutate(is_element = (peak.ID %in% p1.nfia.df$peak.ID))
+
+p2.conn %<>%
+  mutate(is_element = (peak.ID %in% p2.nfia.df$peak.ID))
+
+pM.conn %<>%
+  mutate(is_element = (peak.ID %in% pM.nfia.df$peak.ID))
+```
+
+Annotate NFIA-dependent genes in all the predicted pairs:
+
+```{r}
+p1.ref.genes = readRDS("../r_results/diff_expression/tables/p1_ref_genes.rds")
+
+p2.ref.genes = readRDS("../r_results/diff_expression/tables/p2_ref_genes.rds")
+
+pM.ref.genes = readRDS("../r_results/diff_expression/tables/pM_ref_genes.rds")
+
+p1.ref.genes.annot = gene_id_name %>%
+  filter(gene_name %in% p1.ref.genes)
+
+p2.ref.genes.annot = gene_id_name %>%
+  filter(gene_name %in% p2.ref.genes)
+
+pM.ref.genes.annot = gene_id_name %>%
+  filter(gene_name %in% pM.ref.genes)
+
+p1.conn %<>%
+  mutate(is_dependent_gene = (gene.ENSEMBL %in% p1.ref.genes.annot$gene_id))
+
+p2.conn %<>%
+  mutate(is_dependent_gene = (gene.ENSEMBL %in% p2.ref.genes.annot$gene_id))
+
+pM.conn %<>%
+  mutate(is_dependent_gene = (gene.ENSEMBL %in% pM.ref.genes.annot$gene_id))
+```
+
+Annotate genes in all the predicted pairs with gene names:
+
+```{r}
+p1.conn %<>%
+  left_join(gene_id_name,
+            by = c("gene.ENSEMBL" = "gene_id"))
+
+p2.conn %<>%
+  left_join(gene_id_name,
+            by = c("gene.ENSEMBL" = "gene_id"))
+
+pM.conn %<>%
+  left_join(gene_id_name,
+            by = c("gene.ENSEMBL" = "gene_id"))
+```
+
+Annotate regions from all the predicted pairs with region IDs:
+
+```{r}
+p1.conn %<>%
+  left_join(p1.regions.annot %>%
+              dplyr::select(Geneid,
+                            peak.ID) %>%
+              dplyr::rename("RegionID" = "Geneid"),
+            by = c("peak.ID" = "peak.ID"))
+
+p2.conn %<>%
+  left_join(p2.regions.annot %>%
+              dplyr::select(Geneid,
+                            peak.ID) %>%
+              dplyr::rename("RegionID" = "Geneid"),
+            by = c("peak.ID" = "peak.ID"))
+
+pM.conn %<>%
+  left_join(pM.regions.annot %>%
+              dplyr::select(Geneid,
+                            peak.ID) %>%
+              dplyr::rename("RegionID" = "Geneid"),
+            by = c("peak.ID" = "peak.ID"))
+```
+
+Save the final tables of all predicted pairs:
+
+```{r}
+saveRDS(p1.conn,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p1_pairs_all.rds")
+
+saveRDS(p2.conn,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_all.rds")
+
+saveRDS(pM.conn,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_all.rds")
+```
+
+## Explore predicted region-gene pairs
+
+...
+

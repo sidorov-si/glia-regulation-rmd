@@ -91,7 +91,7 @@ analyse_diff_accessibility = function(cond.target.long, cond.ref.long,
                                       cond.target.short, cond.ref.short) {
   # Find differentially accessible regions
   p = read.delim(paste0("../results/select_samples/featureCounts_",  
-                 cond.ref.long, "_vs_", cond.target.long, ".tsv")) %>%
+                        cond.ref.long, "_vs_", cond.target.long, ".tsv")) %>%
   dplyr::select(-X)
 
   names(p) = gsub(pattern = ".mLb.clN.bam", replacement = "", x = names(p))
