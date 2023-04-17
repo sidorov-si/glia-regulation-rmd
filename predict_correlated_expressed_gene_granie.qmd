@@ -16,6 +16,7 @@ library(magrittr)
 library(DESeq2)
 library(biomaRt)
 library(readr)
+library(ggplot2)
 ```
 
 ## Define constants and helper functions
@@ -758,7 +759,7 @@ saveRDS(pM.conn.element.dep,
         "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
 ```
 
-Stratify the significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN into positively and negatively correlated. We expect them all to be positively correlated:
+Stratify the significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN into positively and negatively correlated:
 
 ```{r}
 cat("The numbers of positively/negatively correlated significant pairs in p2:", 
@@ -774,9 +775,121 @@ cat("The numbers of positively/negatively correlated significant pairs in pM:",
       filter(peak_gene.r <= 0)), "\n")
 ```
 
-The vast majority of the pairs are correlated positively, as expected. But I need to check the one negatively correlated pair in pMN:
+The vast majority of the pairs are correlated positively, which means that both a region and a gene are upregulated in WT-D11 vs WT-D7 but are downregulated in MUT-D11 vs MUT-D7. Only one region-gene pair in pMN is negatively correlated:
 
 ```{r}
 pM.conn.element.dep %>%
       filter(peak_gene.r <= 0)
 ```
+
+which, by the design of my selection procedures for NFIA-dependent regions (and hence, for NFIA elements) and for NFIA-dependent genes, means that the region is upregulated but the gene is downregulated. This is because I select only the regions that are upregulated in WT-D11 vs WT-D7 (and are downregulated in MUT-D11 vs WT-D11) but I select both up- and downregulated genes in WT-D11 vs WT-D7 (with the opposite regulation in MUT-D11 vs WT-D11). Therefore, the negative correlation could either represent a repressive action of NFIA bound at that particular enhancer towards that particular gene or be just a  spurious association not taking place in reality, because in the case of transcription repression, both the gene and the enhancer region would likely become downregulated and so the region would not be selected as NFIA-dependent in the first place (for which it would need to be differentially upregulated instead).
+
+Compare the sets of region-gene pairs in p2 and pMN:
+
+```{r}
+p2.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
+
+pM.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
+
+p2.conn.element.dep %<>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL))
+
+pM.conn.element.dep %<>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL))
+
+
+p2.conn.element.dep.ids = p2.conn.element.dep$pairID
+
+pM.conn.element.dep.ids = pM.conn.element.dep$pairID
+
+conn.element.dep.ids.shared = intersect(p2.conn.element.dep.ids,
+                                        pM.conn.element.dep.ids)
+
+p2.conn.element.dep.ids.specific = setdiff(p2.conn.element.dep.ids,
+                                           pM.conn.element.dep.ids)
+
+pM.conn.element.dep.ids.specific = setdiff(pM.conn.element.dep.ids,
+                                           p2.conn.element.dep.ids)
+
+p2.conn.element.dep.shared = p2.conn.element.dep %>%
+  filter(pairID %in% conn.element.dep.ids.shared)
+
+pM.conn.element.dep.shared = pM.conn.element.dep %>%
+  filter(pairID %in% conn.element.dep.ids.shared)
+
+p2.conn.element.dep.specific = p2.conn.element.dep %>%
+  filter(pairID %in% p2.conn.element.dep.ids.specific)
+
+pM.conn.element.dep.specific = pM.conn.element.dep %>%
+  filter(pairID %in% pM.conn.element.dep.ids.specific)
+
+saveRDS(p2.conn.element.dep.shared,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene_shared.rds")
+
+saveRDS(pM.conn.element.dep.shared,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene_shared.rds")
+
+saveRDS(p2.conn.element.dep.specific,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene_specific.rds")
+
+saveRDS(pM.conn.element.dep.specific,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene_specific.rds")
+```
+
+Compare the correlation coefficients of the shared and domain-specific region-gene pairs (excluding the only negatively correlated pair):
+
+```{r}
+p2.pM.conn.element.dep = p2.conn.element.dep.shared %>%
+  mutate(category = "shared_p2") %>%
+  bind_rows(pM.conn.element.dep.shared %>%
+              mutate(category = "shared_pM")) %>%
+  bind_rows(p2.conn.element.dep.specific %>%
+              mutate(category = "specific_p2")) %>%
+  bind_rows(pM.conn.element.dep.specific %>%
+              mutate(category = "specific_pM")) %>%
+  filter(peak_gene.r > 0)
+
+p = p2.pM.conn.element.dep %>%
+  ggplot(aes(x = category,
+             y = peak_gene.r)) +
+    geom_boxplot() +
+    theme_classic()
+
+ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_pM_pairs_r_distributions.pdf",
+       p)
+```
+
+For either domain, the correlation coefficients of shared and specific region-gene pairs are comparable and hence the shared and specific pairs are likely to have comparable probabilities of being functional. The fact that the correlation coefficients of both the shared and the specific pairs are lower in p2 than in pMN could be explained by a difference in data quality (as we expect that the degree of correlation in real transcription regulation should not depend on a domain and be an intrinsic property of the fundamental regulation mechanisms).
+
+Compare the correlation coefficients of the p2-specific pairs in p2 and pMN. For functional region-gene pairs that are specific to p2 we expect very low correlation in pMN (not a high correlation coefficient that just was not high enough to call a region-gene pair significant in pMN):
+
+```{r}
+pM.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_all.rds")
+
+pM.pairid.in.p2.specific = pM.conn %>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+  filter(pairID %in% p2.conn.element.dep.ids.specific) %>%
+  pull(pairID)
+
+p = p2.pM.conn.element.dep %>%
+  filter(pairID %in% pM.pairid.in.p2.specific) %>%
+  arrange(pairID) %>%
+  dplyr::select(peak_gene.r) %>%
+  dplyr::rename("peak_gene.r_p2" = "peak_gene.r") %>%
+  bind_cols(pM.conn %>%
+              mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+              filter(pairID %in% pM.pairid.in.p2.specific) %>%
+              arrange(pairID) %>%
+              dplyr::select(peak_gene.r) %>%
+              dplyr::rename("peak_gene.r_pM" = "peak_gene.r")) %>%
+  ggplot(aes(x = peak_gene.r_p2,
+             y = peak_gene.r_pM)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0) +
+    lims(x = c(0, 1), y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_specific_pairs_in_p2_vs_pM.pdf",
+       p)
+```
+
