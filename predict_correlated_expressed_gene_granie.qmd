@@ -451,13 +451,13 @@ saveRDS(grn_pM,
         "../r_results/predict_correlated_expressed_gene_granie/grn_pM/grn_pM.rds")
 ```
 
-For p1, the QC plots on page 1 of the corresponding PDF look good: (1) The raw p-value density for positively correlated connections for the real signal peak at at the smallest p-values (and although the density for the negatively correlated connections peaks at the same p-value range, the peak is much lower); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections; (3) Real connections demonstrate more extreme correlation coefficients than background connections.
+For p1, the QC plots on page 1 of the corresponding PDF look good: (1) The raw p-value density for positively correlated connections for the real signal peak at the smallest p-values (and although the density for the negatively correlated connections peaks at the same p-value range, the peak is much lower); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections; (3) Real connections demonstrate a larger number of the more extreme correlation coefficients than background connections.
 
-For p2, the QC plots on page 1 of the corresponding PDF look worse than for p1, but still acceptable: (1) Almost the same as for p1 (looks OK); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections, but negligibly; (3) Real connections demonstrate more extreme correlation coefficients than background connections, but also negligibly.
+For p2, the QC plots on page 1 of the corresponding PDF look worse than for p1, but still acceptable: (1) Almost the same as for p1 (looks OK); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections, but negligibly; (3) Real connections demonstrate a larger number of the more extreme correlation coefficients than background connections, but much less so than in p1.
 
-For pMN, the QC plots on page 1 of the corresponding PDF look worse than for p1, but still acceptable: (1) Almost the same as for p2 (the background distributions are even less uniform than in p2 but are still OK); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections, but negligibly (exactly like for p2); (3) Real connections demonstrate more extreme correlation coefficients than background connections, but not as much as for p1 (although the distributions definitely look more different than for p2).
+For pMN, the QC plots on page 1 of the corresponding PDF look worse than for p1, but still acceptable: (1) Almost the same as for p2 (the background distributions are even less uniform than in p2 but are still OK); (2) The ratio of positively correlated connections to negatively correlated connections is higher for real connections than for background connections, but negligibly (exactly like for p2); (3) Real connections demonstrate a larger number of the more extreme correlation coefficients than background connections, but not as much as for p1 (although the distributions definitely look more different at flanks than for p2).
 
-The weak dominance of positively correlated connections over negatively correlated connections in all the three domains (and especially in p2 and pMN) could be explained by either any technical problems with the data (for example, the number of samples for each domain is less than 12 which is considered the minimal number of samples for the successful GRaNIE analysis by the authors of the package) or by some biological effects (either a possible biological relevance of negative correlations between peak accessibility and gene expression, which GRaNIE authors dismiss, or a possible colocalisation of peaks and genes that are strongly positively regulated with peaks and genes that are strongly negatively regulated, so that genes under both modes of regulation would be found in any given vicinity around a peak; this possibility is in line with my previous failures to establish a working background and implies that long-range regulation that skips non-target genes and enhancers is predominant).
+The weak dominance of positively correlated connections over negatively correlated connections in all the three domains (and especially in p2 and pMN) could be explained by either any technical problems with the data (for example, the number of samples for each domain is less than 12 which is considered the minimal number of samples for the successful GRaNIE analysis by the authors of the package) or by some biological effects (either a possible biological relevance of negative correlations between peak accessibility and gene expression, which GRaNIE authors dismiss, or a possible colocalisation of peaks and genes that are strongly positively regulated with peaks and genes that are strongly negatively regulated, so that genes under both modes of regulation would be found in any given vicinity around a peak; this possibility is in line with my previous failures to establish a working background and implies that long-range regulation that skips non-target genes is predominant).
 
 I tried to filter by the minimum mean normalised exression of 5 (default in GRaNIE) or 20, but then the QC becomes worse.
 
@@ -664,6 +664,12 @@ saveRDS(pM.conn,
 Form the target sets of region-gene pairs:
 
 ```{r}
+p1.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p1_pairs_all.rds")
+
+p2.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_all.rds")
+
+pM.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_all.rds")
+
 p1.conn.dep = p1.conn %>%
   filter(padj < fdr.pairs) %>%
   filter(is_dependent)
@@ -749,9 +755,12 @@ cat("The number of significant region-gene pairs with NFIA elements and NFIA-dep
 
 There is only one significant NFIA element -- NFIA-dependent gene pair in p1, hence we will compare only p2 and pMN.
 
-Save the tables of significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN:
+Save the tables of significant NFIA element -- NFIA-dependent gene pairs:
 
 ```{r}
+saveRDS(p1.conn.element.dep,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p1_pairs_nfia-element_nfia-dep-gene.rds")
+
 saveRDS(p2.conn.element.dep,
         "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
 
@@ -782,11 +791,13 @@ pM.conn.element.dep %>%
       filter(peak_gene.r <= 0)
 ```
 
-which, by the design of my selection procedures for NFIA-dependent regions (and hence, for NFIA elements) and for NFIA-dependent genes, means that the region is upregulated but the gene is downregulated. This is because I select only the regions that are upregulated in WT-D11 vs WT-D7 (and are downregulated in MUT-D11 vs WT-D11) but I select both up- and downregulated genes in WT-D11 vs WT-D7 (with the opposite regulation in MUT-D11 vs WT-D11). Therefore, the negative correlation could either represent a repressive action of NFIA bound at that particular enhancer towards that particular gene or be just a  spurious association not taking place in reality, because in the case of transcription repression, both the gene and the enhancer region would likely become downregulated and so the region would not be selected as NFIA-dependent in the first place (for which it would need to be differentially upregulated instead).
+which, by the design of my selection procedures for NFIA-dependent regions (and hence, for NFIA elements) and for NFIA-dependent genes, means that the region is upregulated but the gene is downregulated. This is because I select only the regions that are upregulated in WT-D11 vs WT-D7 (and are downregulated in MUT-D11 vs WT-D11) but I select both up- and downregulated genes in WT-D11 vs WT-D7 (with the opposite regulation in MUT-D11 vs WT-D11). Therefore, the negative correlation could either represent a repressive action of NFIA bound at that particular enhancer towards that particular gene or be just a spurious association not taking place in reality, because in the case of transcription repression, both the gene and the enhancer region would likely become downregulated and so the region would not be selected as NFIA-dependent in the first place (for which it would need to be differentially upregulated instead).
 
 Compare the sets of region-gene pairs in p2 and pMN:
 
 ```{r}
+# !!Also print as p2-specific element-gene pairs that are technically p2-specific and not present among all pM pairs.
+
 p2.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
 
 pM.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
@@ -796,7 +807,6 @@ p2.conn.element.dep %<>%
 
 pM.conn.element.dep %<>%
   mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL))
-
 
 p2.conn.element.dep.ids = p2.conn.element.dep$pairID
 
@@ -857,39 +867,172 @@ p = p2.pM.conn.element.dep %>%
 
 ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_pM_pairs_r_distributions.pdf",
        p)
+
+p
 ```
 
-For either domain, the correlation coefficients of shared and specific region-gene pairs are comparable and hence the shared and specific pairs are likely to have comparable probabilities of being functional. The fact that the correlation coefficients of both the shared and the specific pairs are lower in p2 than in pMN could be explained by a difference in data quality (as we expect that the degree of correlation in real transcription regulation should not depend on a domain and be an intrinsic property of the fundamental regulation mechanisms).
+For either domain, the correlation coefficients of shared and specific region-gene pairs are comparable and hence the shared and specific pairs likely have comparable probabilities of being functional. The fact that the correlation coefficients of both the shared and the specific pairs are lower in p2 than in pMN could be explained by a difference in data quality (as we expect that the degree of correlation in real transcription regulation should not depend on a domain and be an intrinsic property of the fundamental regulation mechanisms).
 
-Compare the correlation coefficients of the p2-specific pairs in p2 and pMN. For functional region-gene pairs that are specific to p2 we expect very low correlation in pMN (not a high correlation coefficient that just was not high enough to call a region-gene pair significant in pMN):
+Compare the correlation coefficients of the p2-specific pairs in p2 and pMN. For functional region-gene pairs that are specific to p2 we expect very low correlation in pMN (not a correlation coefficient that was high but just not high enough to call a region-gene pair significant in pMN):
 
 ```{r}
+p2.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_all.rds")
+
 pM.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_all.rds")
 
-pM.pairid.in.p2.specific = pM.conn %>%
+p2.specific.pairids = p2.conn.element.dep.specific %>%
   mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
-  filter(pairID %in% p2.conn.element.dep.ids.specific) %>%
   pull(pairID)
 
-p = p2.pM.conn.element.dep %>%
-  filter(pairID %in% pM.pairid.in.p2.specific) %>%
-  arrange(pairID) %>%
-  dplyr::select(peak_gene.r) %>%
-  dplyr::rename("peak_gene.r_p2" = "peak_gene.r") %>%
-  bind_cols(pM.conn %>%
+pM.all.pairids = pM.conn %>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+  pull(pairID)
+
+p2.specific.pM.all.common.pairids = intersect(p2.specific.pairids,
+                                              pM.all.pairids)
+
+p2.pM.df = p2.conn.element.dep.specific %>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+  filter(pairID %in% p2.specific.pM.all.common.pairids) %>%
+  dplyr::select(pairID,
+                gene_name,
+                RegionID,
+                gene.ENSEMBL,
+                peak_gene.distance,
+                peak_gene.r) %>%
+  dplyr::rename("peak_gene.r.p2" = "peak_gene.r") %>%
+  left_join(pM.conn %>%
               mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
-              filter(pairID %in% pM.pairid.in.p2.specific) %>%
-              arrange(pairID) %>%
-              dplyr::select(peak_gene.r) %>%
-              dplyr::rename("peak_gene.r_pM" = "peak_gene.r")) %>%
-  ggplot(aes(x = peak_gene.r_p2,
-             y = peak_gene.r_pM)) +
-    geom_point() +
-    geom_abline(slope = 1, intercept = 0) +
-    lims(x = c(0, 1), y = c(0, 1)) +
-    theme_classic()
+              filter(pairID %in% p2.specific.pM.all.common.pairids) %>%
+              dplyr::select(pairID,
+                            peak_gene.r) %>%
+              dplyr::rename("peak_gene.r.pM" = "peak_gene.r"),
+            by = c("pairID" = "pairID"))
+
+
+p = p2.pM.df %>%
+  ggplot(aes(x = peak_gene.r.p2,
+             y = peak_gene.r.pM)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0) +
+  lims(x = c(0, 1), y = c(0, 1)) +
+  theme_classic()
+
+p
 
 ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_specific_pairs_in_p2_vs_pM.pdf",
        p)
+
+# pM.conn %>%
+#   filter(padj < fdr.pairs) %>%
+#   filter(peak_gene.r > 0) %>%
+#   arrange(-peak_gene.r) %>%
+#   tail()
+
+# min_pM(r) = 0.8172293
+
+# pM.pairid.in.p2.specific = pM.conn %>%
+#   mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+#   filter(pairID %in% p2.conn.element.dep.ids.specific) %>%
+#   pull(pairID)
+# 
+# p2.specific.in.pM.df = p2.pM.conn.element.dep %>%
+#   filter(pairID %in% pM.pairid.in.p2.specific) %>%
+#   arrange(pairID) %>%
+#   dplyr::select(pairID,
+#                 peak_gene.r) %>%
+#   dplyr::rename("pairID_p2" = "pairID",
+#                 "peak_gene.r_p2" = "peak_gene.r") %>%
+#   bind_cols(pM.conn %>%
+#               mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+#               filter(pairID %in% pM.pairid.in.p2.specific) %>%
+#               arrange(pairID) %>%
+#               dplyr::select(peak_gene.r) %>%
+#               dplyr::rename("peak_gene.r_pM" = "peak_gene.r"))
+# 
+# p = p2.specific.in.pM.df %>%
+#   ggplot(aes(x = peak_gene.r_p2,
+#              y = peak_gene.r_pM)) +
+#     geom_point() +
+#     geom_abline(slope = 1, intercept = 0) +
+#     lims(x = c(0, 1), y = c(0, 1)) +
+#     theme_classic()
+
+# ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_specific_pairs_in_p2_vs_pM.pdf",
+#        p)
+# 
+# p
+
+# Save p2.specific.in.pM.df
 ```
 
+- Correct the interpretation.
+- Print the p2-specific pairs that are not among pM-all.
+- Polish the two plots.
+- Proceed with the plots below (and interpret the higher correlations in p2 than in pM for the pM-specific vs p2-all).
+
+Contrary to our expectations, the majority of the "p2-specific" region-gene pairs are as highly (or even higher!) correlated in pM as in p2. It means that in both domains they have comparably high correlation but in pM they did not pass the FDR cutoff. Consequently, as the only plausible p2-specific connections, we could take the connections with the correlation coefficients in pM less than 0.5:
+
+```{r}
+p2.specific.in.pM.df %>%
+  arrange(peak_gene.r_pM) %>%
+  filter(peak_gene.r_pM < 0.5)
+```
+
+Compare the correlation coefficients of the pM-specific pairs in pM and p2. From the result above, we expect that all these pairs will be considerably higher correlated in pM than in p2, simply because significant region-gene pairs are higher correlated in pM than in p2 in general:
+
+```{r}
+p2.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_all.rds")
+
+p2.conn %>%
+  filter(padj < fdr.pairs) %>%
+  filter(peak_gene.r > 0) %>%
+  arrange(-peak_gene.r) %>%
+  tail()
+
+# min_pM(r) = 0.8036684
+
+p2.pairid.in.pM.specific = p2.conn %>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+  filter(pairID %in% pM.conn.element.dep.ids.specific) %>%
+  pull(pairID)
+
+pM.specific.in.p2.df = p2.pM.conn.element.dep %>%
+  filter(pairID %in% p2.pairid.in.pM.specific) %>%
+  arrange(pairID) %>%
+  dplyr::select(pairID,
+                peak_gene.r) %>%
+  dplyr::rename("pairID_pM" = "pairID",
+                "peak_gene.r_pM" = "peak_gene.r") %>%
+  bind_cols(p2.conn %>%
+              mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+              filter(pairID %in% p2.pairid.in.pM.specific) %>%
+              # Exclude the pair that was negatively correlated in pM
+              filter(pairID != "Interval_107245_ENSMUSG00000026934") %>% 
+              arrange(pairID) %>%
+              dplyr::select(peak_gene.r) %>%
+              dplyr::rename("peak_gene.r_p2" = "peak_gene.r"))
+
+p = pM.specific.in.p2.df %>%
+  ggplot(aes(x = peak_gene.r_pM,
+             y = peak_gene.r_p2)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0) +
+    #lims(x = c(0, 1), y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/pM_specific_pairs_in_pM_vs_p2.pdf",
+       p)
+
+p
+
+# Save pM.specific.in.p2.df
+```
+
+Interestingly, there are "pM-specific" pairs that are correlated even higher in p2, although correlations in p2 are, overall, lower than in pM. As reasonable pM-specific, take the pairs with the correlation coefficients in p2 less than 0.5:
+
+```{r}
+pM.specific.in.p2.df %>%
+  arrange(peak_gene.r_p2) %>%
+  filter(peak_gene.r_p2 < 0.5)
+```
