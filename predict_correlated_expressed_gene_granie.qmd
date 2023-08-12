@@ -717,6 +717,78 @@ p2.conn.element.dep = p2.conn %>%
 pM.conn.element.dep = pM.conn %>%
   filter(padj < fdr.pairs) %>%
   filter(is_element & is_dependent_gene)
+
+write.table(p1.conn.element.dep %>%
+              dplyr::rename("region_id" = "RegionID",
+                            "region_coord" = "peak.ID",
+                            "gene_id" = "gene.ENSEMBL",
+                            "region_gene_distance" = "peak_gene.distance",
+                            "region_gene_correlation" = "peak_gene.r",
+                            "region_gene_raw_pvalue" = "peak_gene.p_raw",
+                            "region_gene_adj_pvalue" = "padj") %>%
+              dplyr::select(region_id,
+                            region_coord,
+                            gene_id,
+                            gene_name,
+                            region_gene_distance,
+                            region_gene_correlation,
+                            region_gene_raw_pvalue,
+                            region_gene_adj_pvalue,
+                            -is_dependent,
+                            -is_element,
+                            -is_dependent_gene),
+            "../r_results/predict_correlated_expressed_gene_granie/tables/p1_conn_element-dependent_gene.tsv",
+            row.names = F,
+            sep = "\t",
+            quote = F)
+
+write.table(p2.conn.element.dep %>%
+              dplyr::rename("region_id" = "RegionID",
+                            "region_coord" = "peak.ID",
+                            "gene_id" = "gene.ENSEMBL",
+                            "region_gene_distance" = "peak_gene.distance",
+                            "region_gene_correlation" = "peak_gene.r",
+                            "region_gene_raw_pvalue" = "peak_gene.p_raw",
+                            "region_gene_adj_pvalue" = "padj") %>%
+              dplyr::select(region_id,
+                            region_coord,
+                            gene_id,
+                            gene_name,
+                            region_gene_distance,
+                            region_gene_correlation,
+                            region_gene_raw_pvalue,
+                            region_gene_adj_pvalue,
+                            -is_dependent,
+                            -is_element,
+                            -is_dependent_gene),
+            "../r_results/predict_correlated_expressed_gene_granie/tables/p2_conn_element-dependent_gene.tsv",
+            row.names = F,
+            sep = "\t",
+            quote = F)
+
+write.table(pM.conn.element.dep %>%
+              dplyr::rename("region_id" = "RegionID",
+                            "region_coord" = "peak.ID",
+                            "gene_id" = "gene.ENSEMBL",
+                            "region_gene_distance" = "peak_gene.distance",
+                            "region_gene_correlation" = "peak_gene.r",
+                            "region_gene_raw_pvalue" = "peak_gene.p_raw",
+                            "region_gene_adj_pvalue" = "padj") %>%
+              dplyr::select(region_id,
+                            region_coord,
+                            gene_id,
+                            gene_name,
+                            region_gene_distance,
+                            region_gene_correlation,
+                            region_gene_raw_pvalue,
+                            region_gene_adj_pvalue,
+                            -is_dependent,
+                            -is_element,
+                            -is_dependent_gene),
+            "../r_results/predict_correlated_expressed_gene_granie/tables/pM_conn_element-dependent_gene.tsv",
+            row.names = F,
+            sep = "\t",
+            quote = F)
 ```
 
 Summarise the predicted region-gene pairs:
@@ -753,9 +825,7 @@ cat("The number of significant region-gene pairs with NFIA-dependent regions and
 cat("The number of significant region-gene pairs with NFIA elements and NFIA-dependent genes:", nrow(pM.conn.element.dep), "\n")
 ```
 
-There is only one significant NFIA element -- NFIA-dependent gene pair in p1, hence we will compare only p2 and pMN.
-
-Save the tables of significant NFIA element -- NFIA-dependent gene pairs:
+Additionally save the tables of significant NFIA element -- NFIA-dependent gene pairs as RDS objects:
 
 ```{r}
 saveRDS(p1.conn.element.dep,
@@ -767,6 +837,20 @@ saveRDS(p2.conn.element.dep,
 saveRDS(pM.conn.element.dep,
         "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
 ```
+
+There is only one significant NFIA element -- NFIA-dependent gene pair in p1. It includes the gene Aldoc (Aldolase, Fructose-Bisphosphate C) which is an astroglial marker, according to the [CellMarker 2.0](http://117.50.127.228/CellMarker/CellMarkerDetail.jsp?species=Mouse&tissue_type=Brain&tissue_class=Brain&cell_name=Astrocyte&cell_type=Normal%20cell&marker=Aldoc&marker_source=Experiment&fourtable=four) database ([Hu et al., 2022](https://academic.oup.com/nar/article/51/D1/D870/6775381)) and which, in human, [is expressed almost exclusively in the brain](https://gtexportal.org/home/gene/ALDOC). Its significant connection to the Interval_33430 NFIA element (chr11:78152202-78154210) is also present in p2 and pM:
+
+```{r}
+p2.conn.element.dep %>%
+  filter(RegionID == "Interval_33430")
+
+pM.conn.element.dep %>%
+  filter(RegionID == "Interval_33430")
+```
+
+Therefore, it is reasonable to count the connection as real.
+
+As there is only one significant NFIA element -- NFIA-dependent gene pair in p1, we will compare only p2 and pMN.
 
 Stratify the significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN into positively and negatively correlated:
 
@@ -792,6 +876,135 @@ pM.conn.element.dep %>%
 ```
 
 which, by the design of my selection procedures for NFIA-dependent regions (and hence, for NFIA elements) and for NFIA-dependent genes, means that the region is upregulated but the gene is downregulated. This is because I select only the regions that are upregulated in WT-D11 vs WT-D7 (and are downregulated in MUT-D11 vs WT-D11) but I select both up- and downregulated genes in WT-D11 vs WT-D7 (with the opposite regulation in MUT-D11 vs WT-D11). Therefore, the negative correlation could either represent a repressive action of NFIA bound at that particular enhancer towards that particular gene or be just a spurious association not taking place in reality, because in the case of transcription repression, both the gene and the enhancer region would likely become downregulated and so the region would not be selected as NFIA-dependent in the first place (for which it would need to be differentially upregulated instead).
+
+Next, find significant NFIA element-NFIA dependent gene pairs in one domain that are not present (even as insignificant) in the other (due to the filtering by the mean normalized levels of the chromatin accessibility and gene expression):
+
+```{r}
+p2.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
+
+pM.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
+
+p2.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_all.rds")
+
+pM.conn = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_all.rds")
+
+pM.conn.ids = pM.conn %>%
+  mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+  pull(gene_region_id)
+
+p2.specific.no.pM = p2.conn.element.dep %>%
+  mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+  filter(!gene_region_id %in% pM.conn.ids)
+
+p2.specific.no.pM
+
+p2.conn.ids = p2.conn %>%
+  mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+  pull(gene_region_id)
+
+pM.specific.no.p2 = pM.conn.element.dep %>%
+  mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+  filter(!gene_region_id %in% p2.conn.ids)
+
+pM.specific.no.p2
+```
+
+The two p2-specific gene-region pairs that are not present among the pM pairs both contain the _Actg2_ gene (Actin Gamma 2, Smooth Muscle). Looks irrelevant to gliogenesis, unless it plays a role in cell motility during the neural tube formation.
+
+One of the two pM-specific gene-region pairs that are not present among the p2 pairs includes the _Cntnap3_ gene, Contactin Associated Protein Family Member 3, whose product belongs to the NCP protein family and hence may participate in neuron-glia interactions, according to the [NCBI Gene Summary](https://www.ncbi.nlm.nih.gov/gene/79937#summary). This gene-region pair looks relevant, but because the neuron-glia interactions could be important for the gliogenesis in any of the three domains (p1, p2 and pM), I would need to check if this pair was just a near miss of the set gene expression or region accessibility cutoff in p2 and p1 (in which case it may not be reasonable to classify it as p2-specific). The other pair includes the _Prr18_ gene, Proline Rich 18, whose relevance is unclear as it is not well characterised (according to [GeneCards](https://www.genecards.org/cgi-bin/carddisp.pl?gene=PRR18)).
+
+Next, call p2- and pM-specific gene-region pairs which are also present in the opposite domain (passed the expression and accessibility cutoffs) but either the gene, or the region, or both are not NFIA-dependent, or, alternatively, both are dependent but the correlation between them is insignificant.
+
+Find such p2-specific pairs:
+
+```{r}
+p2.conn.element.dep.pM.comm = p2.conn.element.dep %>%
+  mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+  dplyr::rename("region_gene_correlation_p2" = "peak_gene.r",
+                "region_gene_raw_pvalue_p2" = "peak_gene.p_raw",
+                "region_gene_adj_pvalue_p2" = "padj",
+                "is_dependent_region_p2" = "is_dependent",
+                "is_element_p2" = "is_element",
+                "is_dependent_gene_p2" = "is_dependent_gene",
+                "region_gene_distance" = "peak_gene.distance",
+                "region_id" = "RegionID",
+                "region_coord" = "peak.ID",
+                "gene_id" = "gene.ENSEMBL") %>%
+  left_join(pM.conn %>%
+              mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+              dplyr::select(-gene.ENSEMBL,
+                            -RegionID,
+                            -peak.ID,
+                            -peak_gene.distance,
+                            -gene_name) %>%
+              dplyr::rename("region_gene_correlation_pM" = "peak_gene.r",
+                            "region_gene_raw_pvalue_pM" = "peak_gene.p_raw",
+                            "region_gene_adj_pvalue_pM" = "padj",
+                            "is_dependent_region_pM" = "is_dependent",
+                            "is_element_pM" = "is_element",
+                            "is_dependent_gene_pM" = "is_dependent_gene"),
+            by = c("gene_region_id" = "gene_region_id")) %>%
+  filter(!is.na(region_gene_correlation_pM)) %>%
+  dplyr::select(region_id,
+                region_coord,
+                gene_id,
+                gene_name,
+                region_gene_distance,
+                region_gene_correlation_p2,
+                region_gene_raw_pvalue_p2,
+                region_gene_adj_pvalue_p2,
+                region_gene_correlation_pM,
+                region_gene_raw_pvalue_pM,
+                region_gene_adj_pvalue_pM,
+                is_dependent_region_pM,
+                is_element_pM,
+                is_dependent_gene_pM) %>%
+  mutate(pair_category = ifelse(is_dependent_region_pM & is_dependent_gene_pM, "Both NFIA-dependent in pM",
+                                ifelse(!is_dependent_region_pM & is_dependent_gene_pM, "Region NFIA-independent in pM",
+                                       ifelse(is_dependent_region_pM & !is_dependent_gene_pM, "Gene NFIA-independent in pM",
+                                              "Both NFIA-independent in pM"))))
+
+write.table(p2.conn.element.dep.pM.comm,
+            "../r_results/predict_correlated_expressed_gene_granie/tables/p2_specific_common_with_pM.tsv",
+            sep = "\t",
+            row.names = F,
+            quote = F)
+
+saveRDS(p2.conn.element.dep.pM.comm,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_specific_common_with_pM.rds")
+
+p = p2.conn.element.dep.pM.comm %>%
+  ggplot(aes(x = region_gene_correlation_p2,
+             y = region_gene_correlation_pM,
+             colour = pair_category)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0) +
+    lims(x = c(0, 1), y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_specific_common_with_pM.pdf",
+       p)
+
+p
+```
+
+<!-- Stats. -->
+
+<!-- Interpretation. -->
+
+<!-- Explain the red dots above the diagonal with the box plot of overall correlation coefficients. -->
+
+Find such pM-specific pairs:
+
+```{r}
+
+```
+
+<!-- Interpretation. -->
+
+<!-- Also consider pairs that are significant in both: how many pairs? what are the genes? -->
+
+---
 
 Compare the sets of region-gene pairs in p2 and pMN:
 
@@ -966,10 +1179,10 @@ ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_specific_
 # Save p2.specific.in.pM.df
 ```
 
-- Correct the interpretation.
-- Print the p2-specific pairs that are not among pM-all.
-- Polish the two plots.
-- Proceed with the plots below (and interpret the higher correlations in p2 than in pM for the pM-specific vs p2-all).
+-   Correct the interpretation.
+-   Print the p2-specific pairs that are not among pM-all.
+-   Polish the two plots.
+-   Proceed with the plots below (and interpret the higher correlations in p2 than in pM for the pM-specific vs p2-all).
 
 Contrary to our expectations, the majority of the "p2-specific" region-gene pairs are as highly (or even higher!) correlated in pM as in p2. It means that in both domains they have comparably high correlation but in pM they did not pass the FDR cutoff. Consequently, as the only plausible p2-specific connections, we could take the connections with the correlation coefficients in pM less than 0.5:
 
