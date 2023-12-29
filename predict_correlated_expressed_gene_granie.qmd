@@ -2,7 +2,7 @@
 title: "Transcription regulation in gliogenesis"
 author: "Sviatoslav Sidorov"
 format: html
-editor: visual
+editor: source
 ---
 
 ## Load libraries
@@ -550,20 +550,20 @@ Annotate NFIA elements in all the predicted connections:
 
 ```{r}
 p1.nfia.df = readRDS(paste0("../r_results/select_diff_regions/", 
-                                    "p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
-                                    "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
+                            "p1_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                            "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
   as.data.frame() %>%
   mutate(peak.ID = paste0(seqnames, ":", start, "-", end))
 
 p2.nfia.df = readRDS(paste0("../r_results/select_diff_regions/", 
-                                    "p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
-                                    "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
+                            "p2_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                            "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
   as.data.frame() %>%
   mutate(peak.ID = paste0(seqnames, ":", start, "-", end))
 
 pM.nfia.df = readRDS(paste0("../r_results/select_diff_regions/", 
-                                    "pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
-                                    "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
+                            "pM_dep_nfia_ranges_with_sites_plus-strand_80pc_match-fdr_", fdr.matches, 
+                            "_in-regions-of_fdr", fdr, "_min-l2fc", min.l2fc, "_min-baseMean", min.baseMean, ".rds")) %>%
   as.data.frame() %>%
   mutate(peak.ID = paste0(seqnames, ":", start, "-", end))
 
@@ -718,6 +718,8 @@ pM.conn.element.dep = pM.conn %>%
   filter(padj < fdr.pairs) %>%
   filter(is_element & is_dependent_gene)
 
+# ...
+
 write.table(p1.conn.element.dep %>%
               dplyr::rename("region_id" = "RegionID",
                             "region_coord" = "peak.ID",
@@ -825,7 +827,7 @@ cat("The number of significant region-gene pairs with NFIA-dependent regions and
 cat("The number of significant region-gene pairs with NFIA elements and NFIA-dependent genes:", nrow(pM.conn.element.dep), "\n")
 ```
 
-Additionally save the tables of significant NFIA element -- NFIA-dependent gene pairs as RDS objects:
+Additionally, save the tables of significant NFIA element -- NFIA-dependent gene pairs as RDS objects:
 
 ```{r}
 saveRDS(p1.conn.element.dep,
@@ -838,19 +840,46 @@ saveRDS(pM.conn.element.dep,
         "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
 ```
 
-There is only one significant NFIA element -- NFIA-dependent gene pair in p1. It includes the gene Aldoc (Aldolase, Fructose-Bisphosphate C) which is an astroglial marker, according to the [CellMarker 2.0](http://117.50.127.228/CellMarker/CellMarkerDetail.jsp?species=Mouse&tissue_type=Brain&tissue_class=Brain&cell_name=Astrocyte&cell_type=Normal%20cell&marker=Aldoc&marker_source=Experiment&fourtable=four) database ([Hu et al., 2022](https://academic.oup.com/nar/article/51/D1/D870/6775381)) and which, in human, [is expressed almost exclusively in the brain](https://gtexportal.org/home/gene/ALDOC). Its significant connection to the Interval_33430 NFIA element (chr11:78152202-78154210) is also present in p2 and pM:
+There is only one significant NFIA element -- NFIA-dependent gene pair in p1:
+
+```{r}
+p1.conn.element.dep %>%
+  dplyr::select(peak.ID,
+                RegionID,
+                gene.ENSEMBL,
+                gene_name,
+                peak_gene.distance,
+                peak_gene.r,
+                padj)
+```
+
+It includes the gene Aldoc (Aldolase, Fructose-Bisphosphate C) which is an astrocyte marker (along with many other brain cell types, including some other types of glia), according to the CellMarker 2.0 database ([Hu et al., 2022](https://academic.oup.com/nar/article/51/D1/D870/6775381)) and which, in human, [is expressed almost exclusively in the brain](https://gtexportal.org/home/gene/ALDOC). Its significant connection to the Interval_33430 NFIA element (chr11:78152202-78154210) is also present in p2 and pM:
 
 ```{r}
 p2.conn.element.dep %>%
-  filter(RegionID == "Interval_33430")
+  filter(RegionID == "Interval_33430") %>%
+  dplyr::select(peak.ID,
+                RegionID,
+                gene.ENSEMBL,
+                gene_name,
+                peak_gene.distance,
+                peak_gene.r,
+                padj)
 
 pM.conn.element.dep %>%
-  filter(RegionID == "Interval_33430")
+  filter(RegionID == "Interval_33430") %>%
+  dplyr::select(peak.ID,
+                RegionID,
+                gene.ENSEMBL,
+                gene_name,
+                peak_gene.distance,
+                peak_gene.r,
+                padj)
 ```
 
 Therefore, it is reasonable to count the connection as real.
 
-As there is only one significant NFIA element -- NFIA-dependent gene pair in p1, we will compare only p2 and pMN.
+As there is only one significant NFIA element -- NFIA-dependent gene pair in p1, we will compare only p2 and pM.
 
 Stratify the significant NFIA element -- NFIA-dependent gene pairs in p2 and pMN into positively and negatively correlated:
 
@@ -872,12 +901,19 @@ The vast majority of the pairs are correlated positively, which means that both 
 
 ```{r}
 pM.conn.element.dep %>%
-      filter(peak_gene.r <= 0)
+    filter(peak_gene.r <= 0) %>%
+    dplyr::select(peak.ID,
+                RegionID,
+                gene.ENSEMBL,
+                gene_name,
+                peak_gene.distance,
+                peak_gene.r,
+                padj)
 ```
 
-which, by the design of my selection procedures for NFIA-dependent regions (and hence, for NFIA elements) and for NFIA-dependent genes, means that the region is upregulated but the gene is downregulated. This is because I select only the regions that are upregulated in WT-D11 vs WT-D7 (and are downregulated in MUT-D11 vs WT-D11) but I select both up- and downregulated genes in WT-D11 vs WT-D7 (with the opposite regulation in MUT-D11 vs WT-D11). Therefore, the negative correlation could either represent a repressive action of NFIA bound at that particular enhancer towards that particular gene or be just a spurious association not taking place in reality, because in the case of transcription repression, both the gene and the enhancer region would likely become downregulated and so the region would not be selected as NFIA-dependent in the first place (for which it would need to be differentially upregulated instead).
+which, by the design of my selection procedures for NFIA-dependent regions (and hence, for NFIA elements) and for NFIA-dependent genes, means that the region is upregulated but the gene is downregulated. This is because I select only the regions that are upregulated in WT-D11 vs WT-D7 (and are downregulated in MUT-D11 vs WT-D11) but I select both up- and downregulated genes in WT-D11 vs WT-D7 (with the opposite regulation in MUT-D11 vs WT-D11). Therefore, the negative correlation could either represent a repressive action of NFIA bound at that particular enhancer towards that particular gene or be just a spurious association not representing regulation, because in the case of transcription repression, both the gene and the enhancer region would likely become downregulated and so the region would not be selected as NFIA-dependent in the first place (for which it would need to be differentially upregulated instead).
 
-Next, find significant NFIA element-NFIA dependent gene pairs in one domain that are not present (even as insignificant) in the other (due to the filtering by the mean normalized levels of the chromatin accessibility and gene expression):
+Next, find significant NFIA element -- NFIA dependent gene pairs in one domain that are not present (even as insignificant) in the other domain (due to the filtering by the mean normalized levels of the chromatin accessibility and gene expression):
 
 ```{r}
 p2.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
@@ -896,7 +932,18 @@ p2.specific.no.pM = p2.conn.element.dep %>%
   mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
   filter(!gene_region_id %in% pM.conn.ids)
 
-p2.specific.no.pM
+p2.specific.no.pM.pairids = p2.specific.no.pM %>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+  pull(pairID)
+
+p2.specific.no.pM %>%
+  dplyr::select(peak.ID,
+              RegionID,
+              gene.ENSEMBL,
+              gene_name,
+              peak_gene.distance,
+              peak_gene.r,
+              padj)
 
 p2.conn.ids = p2.conn %>%
   mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
@@ -906,63 +953,128 @@ pM.specific.no.p2 = pM.conn.element.dep %>%
   mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
   filter(!gene_region_id %in% p2.conn.ids)
 
-pM.specific.no.p2
+pM.specific.no.p2.pairids = pM.specific.no.p2 %>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+  pull(pairID)
+
+pM.specific.no.p2 %>%
+  dplyr::select(peak.ID,
+              RegionID,
+              gene.ENSEMBL,
+              gene_name,
+              peak_gene.distance,
+              peak_gene.r,
+              padj)
 ```
 
-The two p2-specific gene-region pairs that are not present among the pM pairs both contain the _Actg2_ gene (Actin Gamma 2, Smooth Muscle). Looks irrelevant to gliogenesis, unless it plays a role in cell motility during the neural tube formation.
+The two p2-specific gene-region pairs that are not present among the pM pairs both contain the *Actg2* gene (Actin Gamma 2, Smooth Muscle). Looks irrelevant to gliogenesis, unless it plays a role in cell motility during the neural tube formation. *Actg2* is not a marker of any brain cell type, according to the CellMarker 2.0 database.
 
-One of the two pM-specific gene-region pairs that are not present among the p2 pairs includes the _Cntnap3_ gene, Contactin Associated Protein Family Member 3, whose product belongs to the NCP protein family and hence may participate in neuron-glia interactions, according to the [NCBI Gene Summary](https://www.ncbi.nlm.nih.gov/gene/79937#summary). This gene-region pair looks relevant, but because the neuron-glia interactions could be important for the gliogenesis in any of the three domains (p1, p2 and pM), I would need to check if this pair was just a near miss of the set gene expression or region accessibility cutoff in p2 and p1 (in which case it may not be reasonable to classify it as p2-specific). The other pair includes the _Prr18_ gene, Proline Rich 18, whose relevance is unclear as it is not well characterised (according to [GeneCards](https://www.genecards.org/cgi-bin/carddisp.pl?gene=PRR18)).
+One of the two pM-specific gene-region pairs that are not present among the p2 pairs includes the *Cntnap3* gene, Contactin Associated Protein Family Member 3, whose product belongs to the NCP protein family and hence may participate in neuron-glia interactions, according to the [NCBI Gene Summary](https://www.ncbi.nlm.nih.gov/gene/79937#summary). However, it is not a marker of any cell type, according to the CellMarker database. This gene-region pair looks relevant, but because the neuron-glia interactions could be important for the gliogenesis in any of the three domains (p1, p2 and pM), I would need to check if this pair was just a near miss of the set gene expression or region accessibility cutoff in p2 and p1 (in which case it may not be reasonable to classify it as p2-specific). The other pair includes the *Prr18* gene, Proline Rich 18, whose relevance is unclear as it is not well characterised (according to [GeneCards](https://www.genecards.org/cgi-bin/carddisp.pl?gene=PRR18)). Also, *Prr18* is not a brain cell type marker, according to the CellMarker 2.0 database.
 
-Next, call p2- and pM-specific gene-region pairs which are also present in the opposite domain (passed the expression and accessibility cutoffs) but either the gene, or the region, or both are not NFIA-dependent, or, alternatively, both are dependent but the correlation between them is insignificant.
-
-Find such p2-specific pairs:
+Next, call p2-specific and pM-specific pairs of NFIA-dependent genes and NFIA elements: they should also be present in the opposite domain (pass the expression and accessibility cutoffs) but either the gene, or the region, or both are not NFIA-dependent, or, alternatively, both are dependent but the correlation between them is insignificant:
 
 ```{r}
-p2.conn.element.dep.pM.comm = p2.conn.element.dep %>%
-  mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+p2.conn.element.dep %<>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL))
+
+pM.conn.element.dep %<>%
+  mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL))
+
+p2.conn.element.dep.ids = p2.conn.element.dep$pairID
+
+pM.conn.element.dep.ids = pM.conn.element.dep$pairID
+
+conn.element.dep.ids.shared = intersect(p2.conn.element.dep.ids,
+                                        pM.conn.element.dep.ids)
+
+p2.conn.element.dep.ids.specific = setdiff(p2.conn.element.dep.ids,
+                                           pM.conn.element.dep.ids)
+
+pM.conn.element.dep.ids.specific = setdiff(pM.conn.element.dep.ids,
+                                           p2.conn.element.dep.ids)
+
+p2.conn.element.dep.shared = p2.conn.element.dep %>%
+  filter(pairID %in% conn.element.dep.ids.shared)
+
+pM.conn.element.dep.shared = pM.conn.element.dep %>%
+  filter(pairID %in% conn.element.dep.ids.shared)
+
+p2.conn.element.dep.specific = p2.conn.element.dep %>%
+  filter(pairID %in% p2.conn.element.dep.ids.specific) %>%
+  filter(!pairID %in% p2.specific.no.pM.pairids)
+
+pM.conn.element.dep.specific = pM.conn.element.dep %>%
+  filter(pairID %in% pM.conn.element.dep.ids.specific) %>%
+  filter(!pairID %in% pM.specific.no.p2.pairids)
+
+saveRDS(p2.conn.element.dep.shared,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene_shared.rds")
+
+saveRDS(pM.conn.element.dep.shared,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene_shared.rds")
+
+saveRDS(p2.conn.element.dep.specific,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene_specific.rds")
+
+saveRDS(pM.conn.element.dep.specific,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene_specific.rds")
+```
+
+Numbers of shared and domain-specific pairs:
+
+```{r}
+cat("The number of shared pairs:", length(conn.element.dep.ids.shared), "\n")
+
+cat("The number of p2-specific pairs:", nrow(p2.conn.element.dep.specific), "\n")
+
+cat("The number of pM-specific pairs:", nrow(pM.conn.element.dep.specific), "\n")
+```
+
+Compare correlation coefficients of p2-specific pairs in p2 and pM to find if these pairs are really specific for p2:
+
+```{r}
+p2.conn.element.dep.pM.comm = p2.conn.element.dep.specific %>%
+  dplyr::select(-peak_gene.p_raw,
+                -is_dependent,
+                -is_element,
+                -is_dependent_gene) %>%
   dplyr::rename("region_gene_correlation_p2" = "peak_gene.r",
-                "region_gene_raw_pvalue_p2" = "peak_gene.p_raw",
                 "region_gene_adj_pvalue_p2" = "padj",
-                "is_dependent_region_p2" = "is_dependent",
-                "is_element_p2" = "is_element",
-                "is_dependent_gene_p2" = "is_dependent_gene",
                 "region_gene_distance" = "peak_gene.distance",
                 "region_id" = "RegionID",
                 "region_coord" = "peak.ID",
                 "gene_id" = "gene.ENSEMBL") %>%
   left_join(pM.conn %>%
-              mutate(gene_region_id = paste(gene.ENSEMBL, RegionID, sep = "_")) %>%
+              mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
               dplyr::select(-gene.ENSEMBL,
                             -RegionID,
                             -peak.ID,
                             -peak_gene.distance,
-                            -gene_name) %>%
+                            -gene_name,
+                            -peak_gene.p_raw) %>%
               dplyr::rename("region_gene_correlation_pM" = "peak_gene.r",
-                            "region_gene_raw_pvalue_pM" = "peak_gene.p_raw",
                             "region_gene_adj_pvalue_pM" = "padj",
                             "is_dependent_region_pM" = "is_dependent",
                             "is_element_pM" = "is_element",
                             "is_dependent_gene_pM" = "is_dependent_gene"),
-            by = c("gene_region_id" = "gene_region_id")) %>%
-  filter(!is.na(region_gene_correlation_pM)) %>%
+            by = c("pairID" = "pairID")) %>%
+  mutate(pM_sign = (region_gene_adj_pvalue_pM < fdr.pairs)) %>%
+  mutate(pM_nfia = (is_dependent_region_pM & is_element_pM & is_dependent_gene_pM)) %>%
   dplyr::select(region_id,
                 region_coord,
                 gene_id,
                 gene_name,
                 region_gene_distance,
                 region_gene_correlation_p2,
-                region_gene_raw_pvalue_p2,
                 region_gene_adj_pvalue_p2,
                 region_gene_correlation_pM,
-                region_gene_raw_pvalue_pM,
                 region_gene_adj_pvalue_pM,
-                is_dependent_region_pM,
-                is_element_pM,
-                is_dependent_gene_pM) %>%
-  mutate(pair_category = ifelse(is_dependent_region_pM & is_dependent_gene_pM, "Both NFIA-dependent in pM",
-                                ifelse(!is_dependent_region_pM & is_dependent_gene_pM, "Region NFIA-independent in pM",
-                                       ifelse(is_dependent_region_pM & !is_dependent_gene_pM, "Gene NFIA-independent in pM",
-                                              "Both NFIA-independent in pM"))))
+                pM_sign,
+                pM_nfia) %>%
+  mutate(pair_category = ifelse(pM_sign & pM_nfia, "Error",
+                                ifelse(pM_sign & !pM_nfia, "pM-significant, NFIA-independent",
+                                       ifelse(!pM_sign & pM_nfia, "pM-insignificant, NFIA-dependent",
+                                              "pM-insignificant, NFIA-independent"))))
 
 write.table(p2.conn.element.dep.pM.comm,
             "../r_results/predict_correlated_expressed_gene_granie/tables/p2_specific_common_with_pM.tsv",
@@ -988,29 +1100,221 @@ ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2_specific_
 p
 ```
 
-<!-- Stats. -->
+The p2-specific pairs fall into three categories:
 
-<!-- Interpretation. -->
+1) pM-significant, NFIA-independent: These pairs are significant in pM, as well as in p2, but in pM they are not strictly "NFIA element -- NFIA-dependent gene" pairs, meaning that either the region is not NFIA element, or not even NFIA-dependent, or the gene is not NFIA-dependent, or neither the region, nor the gene are NFIA element / dependent.
 
-<!-- Explain the red dots above the diagonal with the box plot of overall correlation coefficients. -->
+The correlation coefficients of the 8 pairs from this category are on par in pM and p2, which means that the correlations of these regions and genes may not depend on NFIA regulation at all. Hence, I would not consider these p2-specific.
 
-Find such pM-specific pairs:
+2) pM-insignificant, NFIA-dependent: These are pairs of an NFIA element and an NFIA-dependent gene in pM that are not correlated high enough to be deemed significant in pM. 
+
+This category includes only one region-gene pair, and I would not consider it p2-specific, because despite the low correlation, the NFIA-dependent regulation in pM still may be real.
+
+3) pM-insignificant, NFIA-independent: These are pairs that do not depend on NFIA (see the first category for the exact definition of an "NFIA-independent" pair) and are not correlated high enough to be deemed significant in pM. 
+
+These pairs are good candidates for p2-specificity. However, the majority of them are still very highly correlated in pM, which means that their correlation may not depend on NFIA regulation.
+
+In total, I would consider as p2-specific only the two pM-insignificant NFIA-independent pairs with the lowest correlation coefficients in pM, as they are unlikely to be NFIA-regulated there:
+
 
 ```{r}
-
+p2.conn.element.dep.pM.comm %>%
+  arrange(region_gene_correlation_pM) %>%
+  head(2)
 ```
 
-<!-- Interpretation. -->
+These associations involve only *Ednra* (endothelin-1 receptor), which [regulates vasoconstriction](https://www.genecards.org/cgi-bin/carddisp.pl?gene=EDNRA&keywords=Ednra) and takes part in nerual crest development ([Bonano et al., 2008](https://www.sciencedirect.com/science/article/pii/S0012160608011172)). However, I did not find any known direct roles of *Ednra* in gliogenesis or differentiated glia. Also, this gene is not a glial cell marker, according to the CellMarker 2.0 database.
 
-<!-- Also consider pairs that are significant in both: how many pairs? what are the genes? -->
+Next, compare correlation coefficients of pM-specific pairs (excluding the significant negatively correlated one, as it is not interpretable) in pM and p2 to find if these pairs are really specific for pM:
 
----
+```{r}
+pM.conn.element.dep.p2.comm = pM.conn.element.dep.specific %>%
+  dplyr::select(-peak_gene.p_raw,
+                -is_dependent,
+                -is_element,
+                -is_dependent_gene) %>%
+  dplyr::rename("region_gene_correlation_pM" = "peak_gene.r",
+                "region_gene_adj_pvalue_pM" = "padj",
+                "region_gene_distance" = "peak_gene.distance",
+                "region_id" = "RegionID",
+                "region_coord" = "peak.ID",
+                "gene_id" = "gene.ENSEMBL") %>%
+  left_join(p2.conn %>%
+              mutate(pairID = paste0(RegionID, "_", gene.ENSEMBL)) %>%
+              dplyr::select(-gene.ENSEMBL,
+                            -RegionID,
+                            -peak.ID,
+                            -peak_gene.distance,
+                            -gene_name,
+                            -peak_gene.p_raw) %>%
+              dplyr::rename("region_gene_correlation_p2" = "peak_gene.r",
+                            "region_gene_adj_pvalue_p2" = "padj",
+                            "is_dependent_region_p2" = "is_dependent",
+                            "is_element_p2" = "is_element",
+                            "is_dependent_gene_p2" = "is_dependent_gene"),
+            by = c("pairID" = "pairID")) %>%
+  filter(region_gene_correlation_pM >= 0) %>%
+  mutate(p2_sign = (region_gene_adj_pvalue_p2 < fdr.pairs)) %>%
+  mutate(p2_nfia = (is_dependent_region_p2 & is_element_p2 & is_dependent_gene_p2)) %>%
+  dplyr::select(region_id,
+                region_coord,
+                gene_id,
+                gene_name,
+                region_gene_distance,
+                region_gene_correlation_pM,
+                region_gene_adj_pvalue_pM,
+                region_gene_correlation_p2,
+                region_gene_adj_pvalue_p2,
+                p2_sign,
+                p2_nfia) %>%
+  mutate(pair_category = ifelse(p2_sign & p2_nfia, "Error",
+                                ifelse(p2_sign & !p2_nfia, "p2-significant, NFIA-independent",
+                                       ifelse(!p2_sign & p2_nfia, "p2-insignificant, NFIA-dependent",
+                                              "p2-insignificant, NFIA-independent"))))
+
+write.table(pM.conn.element.dep.p2.comm,
+            "../r_results/predict_correlated_expressed_gene_granie/tables/pM_specific_common_with_p2.tsv",
+            sep = "\t",
+            row.names = F,
+            quote = F)
+
+saveRDS(pM.conn.element.dep.p2.comm,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/pM_specific_common_with_p2.rds")
+
+p = pM.conn.element.dep.p2.comm %>%
+  ggplot(aes(x = region_gene_correlation_pM,
+             y = region_gene_correlation_p2,
+             colour = pair_category)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0) +
+    geom_hline(yintercept = 0) + 
+    lims(x = c(0, 1), y = c(-0.5, 1)) +
+    theme_classic()
+
+ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/pM_specific_common_with_p2.pdf",
+       p)
+
+p
+```
+
+Following the same logic as with p2-specific pairs, I would consider as truly pM-specific the two pairs with the lowest (negative) correlation coefficient in p2, as they are NFIA-independent and insignificant in this domain and their negative correlation coefficients in p2 suggest that there is no regulatory association between the respective genes and regions in this domain:
+
+```{r}
+pM.conn.element.dep.p2.comm %>%
+  arrange(region_gene_correlation_p2) %>%
+  head(2)
+```
+
+These pairs include genes Gas1 and Cnp. Gas1 does not have direct connections to glia, although it is expressed in the central nervous system ([Zarco et al., 2013](https://journals.sagepub.com/doi/10.1369/0022155413498088); [Quezada-Ramirez et al., 2018](https://www.sciencedirect.com/science/article/pii/S0014482718300466); [Jin et al., 2014](https://www.pnas.org/doi/10.1073/pnas.1418629112)), while Cnp facilitates axon-glia interactions ([Rasband et al., 2005](https://onlinelibrary.wiley.com/doi/full/10.1002/glia.20165)) and is an oligodendrocyte marker, according to the [CellMarker 2.0](http://117.50.127.228/CellMarker/CellMarkerSearch.jsp?quickSearchInfo=CNP&index_key=2#framekuang) database.
+
+Finally, consider NFIA-dependent gene-NFIA element pairs that are significant in both p2 and pM:
+
+```{r}
+p2M.conn.element.dep.shared = p2.conn.element.dep.shared %>%
+  dplyr::select(RegionID,
+                peak.ID,
+                gene.ENSEMBL,
+                gene_name,
+                peak_gene.distance,
+                peak_gene.r,
+                padj,
+                pairID,
+                -peak_gene.p_raw,
+                -is_dependent,
+                -is_element,
+                -is_dependent_gene,) %>%
+  dplyr::rename("region_id" = "RegionID",
+                "region_coord" = "peak.ID",
+                "gene_id" = "gene.ENSEMBL",
+                "region_gene_distance" = "peak_gene.distance",
+                "region_gene_correlation_p2" = "peak_gene.r",
+                "region_gene_adj_pvalue_p2" = "padj") %>%
+  left_join(pM.conn.element.dep.shared %>%
+              dplyr::select(peak_gene.r,
+                            padj,
+                            pairID) %>%
+              dplyr::rename("region_gene_correlation_pM" = "peak_gene.r",
+                            "region_gene_adj_pvalue_pM" = "padj"),
+            by = c("pairID" = "pairID")) %>%
+  dplyr::select(region_id,
+                region_coord,
+                gene_id,
+                gene_name,
+                region_gene_distance,
+                region_gene_correlation_p2,
+                region_gene_adj_pvalue_p2,
+                region_gene_correlation_pM,
+                region_gene_adj_pvalue_pM)
+
+write.table(p2M.conn.element.dep.shared,
+            "../r_results/predict_correlated_expressed_gene_granie/tables/p2M_shared.tsv",
+            sep = "\t",
+            row.names = F,
+            quote = F)
+
+saveRDS(p2M.conn.element.dep.shared,
+        "../r_results/predict_correlated_expressed_gene_granie/tables/p2M_shared.rds")
+
+p = p2M.conn.element.dep.shared %>%
+  ggplot(aes(x = region_gene_correlation_p2,
+             y = region_gene_correlation_pM)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0) +
+    lims(x = c(0, 1), y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../r_results/predict_correlated_expressed_gene_granie/plots/p2M_shared.pdf",
+       p)
+
+p
+```
+
+In both domains the shared NFIA element -- NFIA-dependent gene pairs have high correlation coefficients, as expected. However, the vast majority of the pairs have higher coefficients in pM. The pairs are as follows:
+
+```{r}
+p2M.conn.element.dep.shared
+```
+
+They involve the following genes:
+
+```{r}
+p2M.conn.element.dep.shared %>%
+  pull(gene_name) %>%
+  sort() %>%
+  unique()
+```
+
+1) *Aldh1l1* is an astrocyte marker (along with some other glial cell types), according to the CellMarker 2.0 database. As ([Molofsky et al., 2013](https://onlinelibrary.wiley.com/doi/full/10.1002/glia.22538)) summarised, "Aldh1l1 is a folate metabolic enzyme identified by transcriptional profiling as a bona fide astrocyte marker ([Cahoy et al., 2008](https://www.jneurosci.org/content/28/1/264)) that does not colabel with markers of other mature cell types in postnatal brain and is broadly expressed in both fibrous and protoplasmic astrocytes ([Yang et al., 2010](https://onlinelibrary.wiley.com/doi/full/10.1002/glia.21089)). Aldh1l1-GFP is first detected in the spinal cord in radial glial precursors around the time of the neuron-glia switch at mE12.5, and generalizes thereafter to label parenchymal cells ([Anthony and Heintz, 2007](https://onlinelibrary.wiley.com/doi/10.1002/cne.21179)) which are astrocyte precursors ([Tien et al., 2012](https://journals.biologists.com/dev/article/139/14/2477/45171/Regulated-temporal-spatial-astrocyte-precursor); [Tsai et al., 2012](https://www.science.org/doi/10.1126/science.1222381))."
+
+2) *Aldoc* is an astrocyte marker (along with many other brain cell types, including some other types of glia), according to the CellMarker 2.0 database. Additionally, it is the only significant region-gene pair shared among all the three domains, as it is the only significant pair in p1 (described above). *Aldoc* is highly expressed in follicullostellate cells and, at a lower level, in pituicytes ([Fletcher et al., 2022](https://onlinelibrary.wiley.com/doi/full/10.1002/glia.24267)). 
+
+3) *Cbs* is an astrocyte marker, according to the CellMarker 2.0 database. According to ([Enokido et al., 2005](https://faseb.onlinelibrary.wiley.com/doi/full/10.1096/fj.05-3724fje)), "Immunohistochemical analysis revealed that CBS is preferentially expressed in cerebellar Bergmann glia and in astrocytes throughout the brain. At early developmental stages, CBS was expressed in neuroepithelial cells in the ventricular zone, but its expression changed to radial glial cells and then to astrocytes during the late embryonic and neonatal periods. CBS was most highly expressed in juvenile brain, and a striking induction was observed in cultured astrocytes in response to EGF, TGF-α, cAMP, and dexamethasone." 
+
+4) *Csmd1* is a type I spiral ganglion neuron marker, according to the CellMarker 2.0 database. According to a recent single-nucleus study, this gene is uniquely expressed in non-myelinating Schwann cells that "ensheath the small sensory fibers" ([Yim et al., 2022](https://www.nature.com/articles/s41593-021-01005-1)).
+
+5) *Klf15* is not a marker of any particular cell type, according to the CellMarker 2.0 database. Fu and colleagues established this gene as "sufficient for genesis of precocious GFAP-positive astrocytes in spinal cord explants" ([Fu et al., 2009](https://www.jneurosci.org/content/29/36/11399.full)), while Ohtsuka and colleagues have shown that "Klf15 is essential for the maintenance of neural stem cells in the VZ [ventricular zone]" ([Ohtsuka et al., 2011](https://academic.oup.com/stmcls/article/29/11/1817/6403704)).
+
+6) *Mmd2* is an astrocyte marker (along with multiple ductal pancreatic cell), according to the CellMarker 2.0 database. It "perform[s] key migratory and metabolic roles during astro-gliogenesis" and is a target of Sox9 and Nfia ([Kang et al., 2012](https://www.sciencedirect.com/science/article/pii/S0896627312001420)).
+
+7) *Rassf10* is not a marker of any particular cell type, according to the CellMarker 2.0 database. I also did not find anything connecting this gene to glia in literature.
+
+8) *Slc27a1* is an astrocyte and olfactory ensheathing glia marker, according to the CellMarker 2.0 database. I did not find in literature anything more specific about this gene in connection to glia.
+
+9) *Tagln2* is *not* a marker of any brain cell type, according to the CellMarker 2.0 database. However, as summarised in a recent publication by Drake and colleagues, "MT2A and TAGLN2 were identified in three separate papers as upregulated in astrocytes from SPMS NAWM, EAE cerebellum, EAE spinal cord, and several clusters from EAE astrocytes, although not in proinflammatory clusters ([Itoh et al., 2018](https://doi.org/10.1073/pnas.1716032115); [Waller et al., 2016](https://doi.org/10.1016/j.jneuroim.2016.09.010); [Wheeler et al., 2020](https://doi.org/10.1038/s41586-020-1999-0)). Tagln2 was also upregulated in EAE optic nerve ([Itoh et al., 2018](https://doi.org/10.1073/pnas.1716032115))" ([Drake et al., 2023](https://wires.onlinelibrary.wiley.com/doi/full/10.1002/wsbm.1594)).
+
+10) *Thrsp* is a marker of neuronal stem cells and the type IC spiral ganglion neuron, according to the CellMarker 2.0 database. According to Hochgerner and colleagues, "Thrsp (also known as SPOT14) [is] a regulator of adult neurogenesis via lipid metabolism ([Knobloch et al., 2012](https://www.nature.com/articles/nature11689); [Knobloch et al., 2014](https://www.sciencedirect.com/science/article/pii/S2213671114002677)) that is expressed in the quiescent radial and nonradial cells that give rise to the neuronal lineage in adult mice" ([Hochgerner et al., 2018](https://www.nature.com/articles/s41593-017-0056-2)).
+
+11) *Timp4* is *not* a marker of any brain cell type, according to the CellMarker 2.0 database. However, according to the work by Nuttall and co-authors, TIMP4 is preferentially expressed in microglia (along with monocytes), among the cells that they profiled ([Nuttall et al., 2007](https://onlinelibrary.wiley.com/doi/full/10.1002/glia.20478)). 
+
+12) *Tmem176b* is a marker of astrocytes and the type II spiral ganglion neuron, along with many other cell types, according to the CellMarker 2.0 database. It is expressed in neonatal microglia ([Schmid et al., 2009](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1471-4159.2009.05984.x)), and a particular subtype of Schwann cells ([Zhang et al., 2020](https://onlinelibrary.wiley.com/doi/full/10.1002/glia.23928)).
+
+In total, all of these 12 genes, except for *Rassf10*, are expressed in various glial cells and, therefore, their differential expression in the gliogenesis is likely biologically relevant. Additionally, for a known glial marker gene *Mmd2* we predicted a new regulatory element Interval_159802 (chr5:142907480-142907712), ~360 kb downstream from the gene (previously, ([Kang et al., 2012](https://www.sciencedirect.com/science/article/pii/S0896627312001420)) found Sox9 and Nfia binding sites, likely in the proximal promoter of this gene ([Lenhard et al., 2012](https://www.nature.com/articles/nrg3163)), 800 bp upstream from the *Mmd2* TSS).
+
+------------------------------------------------------------------------
 
 Compare the sets of region-gene pairs in p2 and pMN:
 
 ```{r}
-# !!Also print as p2-specific element-gene pairs that are technically p2-specific and not present among all pM pairs.
-
 p2.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/p2_pairs_nfia-element_nfia-dep-gene.rds")
 
 pM.conn.element.dep = readRDS("../r_results/predict_correlated_expressed_gene_granie/tables/pM_pairs_nfia-element_nfia-dep-gene.rds")
